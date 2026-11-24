@@ -70,6 +70,7 @@ export interface UserPreferences {
   customInstructionsEnabled: boolean;
   promptMode: 'full' | 'compact'; // Instruction generator to use; default 'compact'
   autoDiscovery: boolean; // Auto-run tool_lookup/get_tool_schema even if autoExecute off; default true
+  useRtkWithWebCodex: boolean; // Opt-in RTK guidance for WebCodex projects; default false
 }
 
 export interface Notification {

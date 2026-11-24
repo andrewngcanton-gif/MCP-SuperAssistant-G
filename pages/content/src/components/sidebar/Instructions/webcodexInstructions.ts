@@ -1,0 +1,95 @@
+/**
+ * Concise, always-on WebCodex file-edit guidance for the initial instructions.
+ *
+ * It is independent of the RTK toggle and custom instructions. Tool names are taken only from the
+ * advertised WebCodex surface. When `edit_project_files` is advertised but `run_shell` is not,
+ * the guidance keeps the schema/skip/no-retry rules and tells the model to stop/report rather
+ * than inventing a tool or naming another server.
+ */
+
+export interface AdvertisedTool {
+  name: string;
+  schema?: string;
+  description?: string;
+}
+
+export interface WebCodexFileTools {
+  editProjectFiles: string;
+  runShell?: string;
+}
+
+const BASE_NAMES = ['edit_project_files', 'run_shell', 'work_on_project'] as const;
+type BaseName = (typeof BASE_NAMES)[number];
+
+const matchBaseName = (advertised: string, base: BaseName): { prefix: string; full: string } | null => {
+  if (advertised === base) return { prefix: '', full: advertised };
+  for (const separator of ['.', '__']) {
+    const suffix = `${separator}${base}`;
+    if (advertised.endsWith(suffix) && advertised.length > suffix.length) {
+      return { prefix: advertised.slice(0, -suffix.length), full: advertised };
+    }
+  }
+  return null;
+};
+
+/**
+ * Resolve one WebCodex server's file-edit surface, or null when no unambiguous WebCodex
+ * `edit_project_files` is advertised. `runShell` may be absent (disabled/unavailable).
+ */
+export const resolveWebCodexFileTools = (
+  tools: AdvertisedTool[] | undefined,
+): WebCodexFileTools | null => {
+  if (!tools || tools.length === 0) return null;
+
+  // server prefix -> base name -> advertised full name
+  const servers = new Map<string, Map<BaseName, string>>();
+  for (const tool of tools) {
+    const name = tool?.name?.trim();
+    if (!name) continue;
+    for (const base of BASE_NAMES) {
+      const match = matchBaseName(name, base);
+      if (!match) continue;
+      const group = servers.get(match.prefix) ?? new Map<BaseName, string>();
+      if (!group.has(base) || name < group.get(base)!) group.set(base, match.full);
+      servers.set(match.prefix, group);
+    }
+  }
+
+  const hasEdit = (group: Map<BaseName, string> | undefined): group is Map<BaseName, string> =>
+    !!group?.has('edit_project_files');
+
+  // Prefer an explicit WebCodex namespace, even when run_shell is disabled there. Fall back only
+  // to an unqualified local server that also advertises work_on_project and run_shell.
+  const named = [...servers.entries()]
+    .filter(([prefix, group]) => /^(?:mcp__)?webcodex$/i.test(prefix) && hasEdit(group))
+    .map(([, group]) => group);
+  const fallback = [...servers.entries()]
+    .filter(([prefix, group]) =>
+      prefix === '' && hasEdit(group) && !!group.has('run_shell') && group.has('work_on_project'))
+    .map(([, group]) => group);
+  const candidates = named.length ? named : fallback;
+  if (candidates.length !== 1) return null;
+
+  const group = candidates[0];
+  const edit = group.get('edit_project_files');
+  if (!edit) return null;
+  const shell = group.get('run_shell');
+  return shell ? { editProjectFiles: edit, runShell: shell } : { editProjectFiles: edit };
+};
+
+/** Concise shared English section; '' when no WebCodex file-edit tool is advertised. */
+export const buildWebCodexFileEditGuidance = (tools: AdvertisedTool[] | undefined): string => {
+  const names = resolveWebCodexFileTools(tools);
+  if (!names) return '';
+
+  const schemaAndRetryRules = `When using WebCodex, \`${names.editProjectFiles}\` requires nested JSON with \`project\` and \`changes\`. Every \`changes\` item MUST include \`kind\` and \`path\`. If the content contains many quotes, angle brackets, or multiple lines, skip \`${names.editProjectFiles}\`. If \`${names.editProjectFiles}\` returns even one error, do not retry it.`;
+
+  const action = names.runShell
+    ? `In either case, use \`${names.runShell}\` to write or modify the file in one operation with a short Python or PowerShell script.
+Follow the project's permissions and scope. If \`${names.runShell}\` is unavailable, stop and report the problem instead of inventing another tool.`
+    : `No WebCodex \`run_shell\` is available here. Do not invent another tool or use another server: stop and report the problem. Follow the project's permissions and scope.`;
+
+  return `WEBCODEX FILE EDITS
+${schemaAndRetryRules}
+${action}`;
+};

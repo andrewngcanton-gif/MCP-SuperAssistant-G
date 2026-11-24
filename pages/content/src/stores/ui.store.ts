@@ -59,6 +59,7 @@ export const initialUserPreferences: UserPreferences = {
   customInstructionsEnabled: false,
   promptMode: 'compact', // Default to the token-efficient compact generator
   autoDiscovery: true,   // Auto-run discovery meta-tools even when autoExecute is off
+  useRtkWithWebCodex: false, // Opt-in: add RTK guidance for WebCodex projects
   autoInsertDelay: 2,  // Default delay in seconds
   autoExecuteDelay: 2,  // Default delay in seconds
   autoSubmitDelay: 2,   // Default delay in seconds

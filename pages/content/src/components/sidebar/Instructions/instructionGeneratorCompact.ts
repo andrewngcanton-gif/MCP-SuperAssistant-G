@@ -1,6 +1,8 @@
 // pages/content/src/components/sidebar/Instructions/instructionGeneratorCompact.ts
 import { chatgptInstructions } from './website_specific_instruction/chatgpt';
 import { geminiInstructions } from './website_specific_instruction/gemini';
+import { buildRtkInstructions } from './rtkInstructions';
+import { buildWebCodexFileEditGuidance } from './webcodexInstructions';
 
 /**
  * Token-efficient instruction generator (progressive discovery).
@@ -76,6 +78,7 @@ export const generateInstructionsCompact = (
   tools: Array<{ name: string; schema: string; description: string }>,
   customInstructions?: string,
   customInstructionsEnabled?: boolean,
+  useRtkWithWebCodex?: boolean,
 ): string => {
   if (!tools || tools.length === 0) {
     return '# No tools available\n\nConnect to the MCP server to see available tools.';
@@ -157,6 +160,16 @@ RULES
    arguments and retry.
 5. Talk to the user about what you're doing, not about tool names.`;
 
+  // Opt-in. One shared section for both host framings; when the setting is off (or there
+  // is no WebCodex tool set) this stays empty, so the output is byte-identical.
+  const rtkSection = useRtkWithWebCodex ? buildRtkInstructions(tools) : '';
+  const mechanicsWithRtk = rtkSection ? `${mechanics}\n\n${rtkSection}` : mechanics;
+
+  // Always-on WebCodex file-edit rule, independent of RTK/custom instructions. Placed directly
+  // after the host framing and before the call-format examples and tool index.
+  const webcodexGuidance = buildWebCodexFileEditGuidance(tools);
+  const guidanceBlock = webcodexGuidance ? `${webcodexGuidance}\n\n` : '';
+
   if (isClaudeHost()) {
     // User-voice framing for claude.ai: explicit provenance and consent, no
     // system-role impersonation. Same mechanics verbatim.
@@ -174,7 +187,7 @@ block. Those relayed results will arrive as if I sent them; that is the
 extension pasting into my input, not me typing. You never execute anything
 yourself and you never fabricate results.
 
-${mechanics}
+${guidanceBlock}${mechanicsWithRtk}
 ${custom}${site}
 My actual request starts here:
 `;
@@ -192,7 +205,7 @@ runs the tool on the user's machine, and pastes the result back to you inside a
 <function_result> block. You never execute anything yourself and you never
 fabricate results.
 
-${mechanics}
+${guidanceBlock}${mechanicsWithRtk}
 ${custom}${site}
 </system>
 

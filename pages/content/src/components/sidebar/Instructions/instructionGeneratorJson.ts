@@ -2,6 +2,8 @@
 import { jsonSchemaToCsn } from './schema_converter';
 import { chatgptInstructions } from './website_specific_instruction/chatgpt';
 import { geminiInstructions } from './website_specific_instruction/gemini';
+import { buildRtkInstructions } from './rtkInstructions';
+import { buildWebCodexFileEditGuidance } from './webcodexInstructions';
 import { createLogger } from '@extension/shared/lib/logger';
 
 /**
@@ -18,6 +20,7 @@ export const generateInstructionsJson = (
   tools: Array<{ name: string; schema: string; description: string }>,
   customInstructions?: string,
   customInstructionsEnabled?: boolean,
+  useRtkWithWebCodex?: boolean,
 ): string => {
   if (!tools || tools.length === 0) {
     return '# No tools available\n\nConnect to the MCP server to see available tools.';
@@ -27,6 +30,11 @@ export const generateInstructionsJson = (
   // let instructions = '# MCP Tools Instructions\n\n';
   let instructions = '';
   let compressed_schema_notation = '';
+
+  // Always-on WebCodex file-edit rule, independent of RTK/custom instructions. It is injected
+  // before the call-format example and the tool list below.
+  const webcodexGuidance = buildWebCodexFileEditGuidance(tools);
+  const guidanceBlock = webcodexGuidance ? `${webcodexGuidance}\n\n` : '';
 
   // Add general usage information
   // instructions += '## General Usage\n\n';
@@ -65,7 +73,7 @@ The instructions regarding \'call_id\':
 - It is a unique identifier for the function call.
 - It is a number that is incremented by 1 for each new function call, starting from 1.
 
-You can ask user to invoke one or more functions by writing a JSON Lines code block like the following as part of your reply to the user, MAKE SURE TO INVOKE ONLY ONE FUNCTION AT A TIME, It should be a JSON Lines code block like this:
+${guidanceBlock}You can ask user to invoke one or more functions by writing a JSON Lines code block like the following as part of your reply to the user, MAKE SURE TO INVOKE ONLY ONE FUNCTION AT A TIME, It should be a JSON Lines code block like this:
 
 <example_function_call>
 ### Add New Line Here
@@ -294,6 +302,15 @@ ClassName | Custom class | User
   });
 
   // instructions += 'Print it exactly, there is a capturing tool which needs prinited text to run the tool manually\n\n';
+
+  // Opt-in RTK guidance. Empty unless the setting is on and WebCodex tools are advertised,
+  // so the default output stays byte-identical.
+  if (useRtkWithWebCodex) {
+    const rtkInstructions = buildRtkInstructions(tools);
+    if (rtkInstructions) {
+      instructions += `\n${rtkInstructions}\n\n`;
+    }
+  }
 
   //add custom instructions code here
   // Add custom instructions if enabled and available

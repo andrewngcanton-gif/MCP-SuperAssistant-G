@@ -21,6 +21,7 @@ import {
 } from './observer/index';
 import { renderFunctionCall, renderedFunctionBlocks } from './renderer/index';
 import { runStorageCleanup } from './mcpexecute/storage';
+import { initializeAistudioTurnGate } from './provenance/aistudioTurnGate';
 import { createLogger } from '@extension/shared/lib/logger';
 // Import the website-specific components
 // import { initPerplexityComponents } from './websites_components/perplexity';
@@ -233,6 +234,10 @@ const initializeRenderer = () => {
   }
 
   injectStyles();
+
+  // Host-specific: snapshot existing AI Studio turns and start observing real sends before the
+  // initial DOM scan, so historical replies are never admitted to auto-execution.
+  initializeAistudioTurnGate();
 
   // Prune stored function history + schedule periodic cleanup (idempotent).
   runStorageCleanup();

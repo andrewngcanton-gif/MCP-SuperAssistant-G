@@ -4,6 +4,12 @@ import { storeExecutedFunction, generateContentSignature } from '../mcpexecute/s
 import { checkAndDisplayFunctionHistory, createHistoryPanel, updateHistoryPanel } from './functionHistory';
 import { extractJSONParameters, stripLanguageTags, extractCleanContent } from '../parser/jsonFunctionParser';
 import { createLogger } from '@extension/shared/lib/logger';
+import {
+  getAistudioProvenance,
+  isAistudioAutomaticActionEnabled,
+  isAistudioHost,
+  isAistudioProvenanceCurrent,
+} from '../provenance/aistudioTurnGate';
 
 // Add type declarations for the global adapter and mcpClient access
 
@@ -394,12 +400,28 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
   const buttonText = executeButton.querySelector('span')!;
 
   // Optimized click handler with better performance and mcpClient integration
-  executeButton.onclick = async () => {
+  executeButton.onclick = async (event?: MouseEvent) => {
+    const fnBlock = blockDiv.closest('.function-block') as HTMLElement | null;
+    const provenance = getAistudioProvenance(fnBlock);
+    // A programmatic click is the renderer's automatic path and must pass every live gate.
+    // A trusted click is the user's explicit action: it may run historical cards, but its result
+    // still carries no provenance so automation cannot insert/submit it into a stale context.
+    const isAutomaticClick = event ? event.isTrusted === false : false;
+    if (isAistudioHost() && isAutomaticClick) {
+      if (
+        !provenance ||
+        !isAistudioProvenanceCurrent(provenance) ||
+        !isAistudioAutomaticActionEnabled(functionName)
+      ) {
+        logger.debug(`Blocked automatic execute click for non-current AI Studio call ${functionName}`);
+        return;
+      }
+    }
+
     // Batch button state changes
     executeButton.disabled = true;
     buttonText.style.display = 'none';
 
-    const fnBlock = blockDiv.closest('.function-block') as HTMLElement | null;
     const setStatus = (s: 'running' | 'success' | 'error') => {
       if (!fnBlock) return;
       fnBlock.classList.remove('exec-running', 'exec-success', 'exec-error');
@@ -506,7 +528,10 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
             new CustomEvent('mcp:tool-execution-complete', {
               detail: {
                 result: `<function_result call_id="${callId}">\nERROR: ${errorMessage}\n</function_result>`,
+                callId,
+                functionName,
                 skipAutoInsertCheck: false,
+                provenance,
               },
             }),
           );
@@ -715,6 +740,7 @@ const attachResultAsFile = async (
   const fileName = `${functionName}_result_call_id_${callId}.txt`;
   const file = new File([rawResultText], fileName, { type: 'text/plain' });
   const originalButtonText = button.textContent || 'Attach File';
+  const provenance = getAistudioProvenance(button.closest('.function-block'));
   let confirmationText: string | null = null;
 
   // Optimized button state management
@@ -820,7 +846,10 @@ const attachResultAsFile = async (
             isFileAttachment: true,
             fileName,
             confirmationText,
+            callId,
+            functionName,
             skipAutoInsertCheck,
+            provenance,
           };
 
           // Use requestAnimationFrame for better performance
@@ -895,7 +924,10 @@ const attachResultAsFile = async (
           isFileAttachment: true,
           fileName,
           confirmationText,
+          callId,
+          functionName,
           skipAutoInsertCheck,
+          provenance,
         };
 
         scheduleWork(() => {
@@ -967,7 +999,10 @@ const attachResultAsFile = async (
         isFileAttachment: true,
         fileName,
         confirmationText,
+        callId,
+        functionName,
         skipAutoInsertCheck,
+        provenance,
       };
 
       scheduleWork(() => {
@@ -1005,6 +1040,9 @@ export const displayResult = (
   // Cache attributes for performance
   const callId = resultsPanel.getAttribute('data-call-id') || '';
   const functionName = resultsPanel.getAttribute('data-function-name') || '';
+  // Result provenance is derived at display time from the card's own turn, so a manual run on a
+  // historical card cannot auto-insert or auto-submit into the current composer.
+  const provenance = getAistudioProvenance(resultsPanel.closest('.function-block'));
 
   // Efficient cleanup of previous results
   const cleanupPreviousResults = () => {
@@ -1507,7 +1545,10 @@ export const displayResult = (
           new CustomEvent('mcp:tool-execution-complete', {
             detail: {
               result: wrappedResult,
-              skipAutoInsertCheck: false
+              callId,
+              functionName,
+              skipAutoInsertCheck: false,
+              provenance,
             },
           }),
         );

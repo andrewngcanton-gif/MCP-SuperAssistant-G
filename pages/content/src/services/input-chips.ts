@@ -225,6 +225,23 @@ const OVERLAY_STYLES = `
   }
 `;
 
+// A click on a send control is intercepted only while chips are pending. If the control is really
+// Stop/Mic/Attach (Gemini swaps Send for Stop in place), its native action must survive.
+const NON_SUBMIT_CONTROL_RE =
+  /(?:^|[\s_-])(?:stop|microphone|mic|voice|audio|dictation|attach|attachment|upload|add\s*files?)(?:[\s_-]|$)/i;
+
+function isObviousNonSubmitControl(control: Element): boolean {
+  const className = typeof control.className === 'string' ? control.className : '';
+  const vocabulary = [
+    control.getAttribute('aria-label'),
+    control.getAttribute('title'),
+    control.getAttribute('data-test-id'),
+    control.getAttribute('data-testid'),
+    className,
+  ].filter(Boolean).join(' ');
+  return NON_SUBMIT_CONTROL_RE.test(vocabulary);
+}
+
 class InputChipManager {
   private chips: Chip[] = [];
   private adapter: AdapterPlugin | null = null;
@@ -263,8 +280,8 @@ class InputChipManager {
   }
 
   /** Called from pilot submitForm (first line). Merges chips into the input via raw insertText, clears them, settles 300ms. */
-  async flushBeforeSubmit(adapter: AdapterPlugin): Promise<void> {
-    if (!this.chips.length || adapter !== this.adapter) return;
+  async flushBeforeSubmit(adapter: AdapterPlugin): Promise<boolean> {
+    if (!this.chips.length || adapter !== this.adapter) return true;
 
     const flushed = this.chips;
     const payload = this.composePayload(flushed);
@@ -279,7 +296,7 @@ class InputChipManager {
         logger.error('Chip flush insertText returned false; restoring chips');
         this.chips = flushed;
         this.renderBar();
-        return;
+        return false;
       }
       // Mark instructions as delivered for the session only after a successful insert, so the
       // browser primer stops appearing once the model has the real instructions.
@@ -294,6 +311,7 @@ class InputChipManager {
       this.stopWatchdog();
       this.removeUI();
     }
+    return true;
   }
 
   /**
@@ -654,9 +672,14 @@ class InputChipManager {
     if (!e.isTrusted) return;
     if (!this.chips.length || this.flushing || !this.adapter) return;
     const anchors = this.adapter.getChipAnchors?.();
-    if (!anchors) return;
+    if (!anchors || !anchors.submitButtonSelector) return;
     const target = e.target as Element | null;
-    if (!target?.closest?.(anchors.submitButtonSelector)) return;
+    const control = target?.closest?.(anchors.submitButtonSelector) ?? null;
+    // Only intercept the composer's own send control; leave stop/mic controls and unrelated
+    // page buttons (e.g. "Send feedback") to their native behaviour.
+    if (!control) return;
+    if (this.adapter.name === 'GeminiAdapter' &&
+        (!anchors.container.contains(control) || isObviousNonSubmitControl(control))) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     void this.adapter.submitForm?.();

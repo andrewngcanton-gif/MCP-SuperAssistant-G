@@ -16,6 +16,13 @@ import {
 } from '../parser/jsonFunctionParser';
 import { createLogger } from '@extension/shared/lib/logger';
 import { telemetry } from '../../../utils/telemetry';
+import {
+  getAistudioProvenance,
+  isAistudioAutomaticActionEnabled,
+  isAistudioHost,
+  isAistudioProvenanceCurrent,
+  type AistudioProvenance,
+} from '../provenance/aistudioTurnGate';
 
 // Define custom property for tracking scroll state
 
@@ -142,6 +149,7 @@ function getAutomationState() {
       autoInsert: automationState.autoInsert || false,
       autoSubmit: automationState.autoSubmit || false,
       autoExecute: automationState.autoExecute || false,
+      autoDiscovery: automationState.autoDiscovery === true,
     };
   }
   
@@ -151,8 +159,34 @@ function getAutomationState() {
     autoInsert: legacyState?.autoInsert === true,
     autoSubmit: legacyState?.autoSubmit === true,
     autoExecute: legacyState?.autoExecute === true,
+    autoDiscovery: legacyState?.autoDiscovery === true,
   };
 }
+
+const isMetaTool = (functionName: string): boolean =>
+  functionName === 'get_tool_schema' || functionName === 'tool_lookup';
+
+/**
+ * Synchronous eligibility used at the schedule boundary and again immediately before each click.
+ * On AI Studio the call must still belong to the current submission turn and the tool must still
+ * be enabled. Other hosts keep their existing behavior.
+ */
+const canAutoExecuteNow = (block: HTMLElement | null, details: { functionName: string; provenance?: AistudioProvenance | null }): boolean => {
+  const automationState = getAutomationState();
+  const settingOn = automationState.autoExecute || (isMetaTool(details.functionName) && automationState.autoDiscovery);
+  if (!settingOn) return false;
+
+  if (!isAistudioHost()) return true;
+  if (!isAistudioAutomaticActionEnabled(details.functionName)) return false;
+  if (!details.provenance || !isAistudioProvenanceCurrent(details.provenance)) return false;
+  if (!block) return false;
+
+  const current = getAistudioProvenance(block);
+  return !!current
+    && current.epoch === details.provenance.epoch
+    && current.turnId === details.provenance.turnId
+    && current.userTurnId === details.provenance.userTurnId;
+};
 
 // Common style configurations
 const STREAMING_STYLES = {
@@ -1115,7 +1149,7 @@ const ParamElementUtils = {
 // Auto-execution utilities
 const AutoExecutionUtils = {
   setupOptimizedAutoExecution: (blockId: string, functionDetails: any): void => {
-  const setupAutoExecution = () => {
+    const setupAutoExecution = () => {
       const attempts = executionTracker.incrementAttempts(blockId);
 
       if (attempts > MAX_AUTO_EXECUTE_ATTEMPTS) {
@@ -1166,6 +1200,12 @@ const AutoExecutionUtils = {
             return;
           }
 
+          if (!canAutoExecuteNow(currentBlock, functionDetails)) {
+            logger.debug(`Auto-execute: eligibility changed before click for block ${blockId}; cancelling`);
+            executionTracker.cleanupBlock(blockId);
+            return;
+          }
+
           const executeButton = currentBlock.querySelector<HTMLButtonElement>('.execute-button');
           if (executeButton) {
             logger.debug(`Auto-execute: Enqueuing function ${functionDetails.functionName}`);
@@ -1174,6 +1214,12 @@ const AutoExecutionUtils = {
             execChain = execChain
               .then(async () => {
                 try {
+                  // Re-check immediately before the queued click: a delayed batch, a settings
+                  // change, Disable All, navigation or a remount may have invalidated it.
+                  if (!canAutoExecuteNow(blockToSettle, functionDetails)) {
+                    logger.debug(`Auto-execute: eligibility changed in queue for block ${blockId}; skipping click`);
+                    return;
+                  }
                   telemetry('auto_execute');
                   blockToSettle.querySelector<HTMLButtonElement>('.execute-button')?.click();
                   await waitForSettled(blockToSettle);
@@ -1451,10 +1497,17 @@ const renderCard = (
 
       const automationState = getAutomationState();
       const autoExecuteEnabled = automationState.autoExecute;
-      const isMeta = functionName === 'get_tool_schema' || functionName === 'tool_lookup';
-      const autoDiscovery = (window as any).__mcpAutomationState?.autoDiscovery === true;
+      const isMeta = isMetaTool(functionName);
+      const autoDiscovery = automationState.autoDiscovery;
+      const provenance = getAistudioProvenance(block);
       if (contentSignature && !executionTracker.isFunctionExecuted(callId, contentSignature, functionName)) {
         if (isInUserMessage(block) || (autoExecuteEnabled !== true && !(isMeta && autoDiscovery))) {
+          return;
+        }
+        // AI Studio: only a model turn positively tied to this submission may auto-run. Historical
+        // cards remain visible and manually runnable.
+        if (isAistudioHost() && (!provenance || !isAistudioAutomaticActionEnabled(functionName))) {
+          logger.debug(`Auto-execution blocked for non-current AI Studio turn ${cardId} (${functionName})`);
           return;
         }
         if (executionTracker.isBlockExecuted(cardId) === true) {
@@ -1469,6 +1522,7 @@ const renderCard = (
           callId,
           contentSignature,
           params: completeParameters || {},
+          provenance,
         };
 
         AutoExecutionUtils.setupOptimizedAutoExecution(cardId, functionDetails);
@@ -1852,11 +1906,16 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
       // Discovery meta-tools auto-run even when auto-execute is off, provided auto-discovery
       // is enabled. `autoDiscovery` is exposed on __mcpAutomationState by automation.service.ts;
       // read it defensively so this compiles regardless of merge order. Meta names are a fixed contract.
-      const isMeta = functionName === 'get_tool_schema' || functionName === 'tool_lookup';
-      const autoDiscovery = (window as any).__mcpAutomationState?.autoDiscovery === true;
+      const isMeta = isMetaTool(functionName);
+      const autoDiscovery = automationState.autoDiscovery;
+      const provenance = getAistudioProvenance(block);
       if (contentSignature && !executionTracker.isFunctionExecuted(callId, contentSignature, functionName)) {
         if (isInUserMessage(block) || (autoExecuteEnabled !== true && !(isMeta && autoDiscovery))) {
           logger.debug(`Auto-execution disabled by user settings for block ${blockId} (${functionName})`);
+          return true;
+        }
+        if (isAistudioHost() && (!provenance || !isAistudioAutomaticActionEnabled(functionName))) {
+          logger.debug(`Auto-execution blocked for non-current AI Studio turn ${blockId} (${functionName})`);
           return true;
         }
 
@@ -1875,6 +1934,7 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
           callId,
           contentSignature,
           params: completeParameters || {},
+          provenance,
         };
 
         AutoExecutionUtils.setupOptimizedAutoExecution(blockId, functionDetails);

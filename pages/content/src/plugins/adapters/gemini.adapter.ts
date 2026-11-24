@@ -16,6 +16,32 @@ import { inputChips } from '../../services/input-chips';
 
 const logger = createLogger('GeminiAdapter');
 
+/** Bound for waiting on Gemini to render/enable the send control after a chip flush. */
+const SUBMIT_READY_TIMEOUT_MS = 4000;
+/** Re-evaluation cadence while waiting for the composer to settle. */
+const SUBMIT_POLL_INTERVAL_MS = 120;
+
+/**
+ * Words that mean a control is NOT the send action. Checked before any send hint so a control
+ * that morphs from Send into Stop (same wrapper) can never be clicked by auto-submit.
+ */
+const NON_SEND_CONTROL_RE =
+  /(?:^|[\s_-])(?:stop|microphone|mic|voice|audio|dictation|attach|attachment|upload|add\s*files?|tools?|model|settings|menu|more)(?:[\s_-]|$)/i;
+const STOP_CONTROL_RE = /(?:^|[\s_-])(?:stop|pause)(?:[\s_-]|$)|停止|中止|暫停|暂停/i;
+const SEND_HINT_RE = /^(?:send|submit)(?:[ -](?:message|prompt|button))?$|^(?:发送|傳送|送出)(?:消息|訊息)?$/i;
+
+interface GeminiComposerContext {
+  input: HTMLElement;
+  /** Nearest composer wrapper; send controls are only ever searched inside this node. */
+  root: Element;
+}
+
+interface GeminiComposerSnapshot {
+  href: string;
+  input: HTMLElement;
+  draft: string;
+}
+
 export class GeminiAdapter extends BaseAdapterPlugin {
   readonly name = 'GeminiAdapter';
   readonly version = '2.0.0'; // Incremented for new architecture
@@ -33,7 +59,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   // Legacy selectors as fallbacks (will be removed once config system is stable)
   private readonly fallbackSelectors = {
     CHAT_INPUT: 'div.ql-editor.textarea.new-input-ui p, .ql-editor p, div[contenteditable="true"]',
-    SUBMIT_BUTTON: 'button.mat-mdc-icon-button.send-button, button[aria-label*="Send"], button[data-testid="send-button"]',
+    SUBMIT_BUTTON: 'button.send-button, button.mat-mdc-icon-button.send-button, button[aria-label*="Send"], button[data-test-id="send-button"], button[data-testid="send-button"]',
     FILE_UPLOAD_BUTTON: 'button[aria-label="Add files"], button[aria-label*="attach"]',
     FILE_INPUT: 'input[type="file"]',
     MAIN_PANEL: '.chat-web, .main-content, .conversation-container',
@@ -63,6 +89,9 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   
   // Styling state tracking
   private geminiStylesInjected: boolean = false;
+
+  // Guards against overlapping submit attempts (auto-submit + chip interceptor) clicking twice.
+  private submitInFlight: boolean = false;
 
   constructor() {
     super();
@@ -198,14 +227,9 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     if (options?.targetElement) {
       targetElement = options.targetElement;
     } else {
-      // Try multiple selectors for better compatibility
-      const selectors = this.getSelector('chatInput').split(', ');
-      for (const selector of selectors) {
-        targetElement = document.querySelector(selector.trim()) as HTMLElement;
-        if (targetElement) {
-          this.context.logger.debug(`Found chat input using selector: ${selector.trim()}`);
-          break;
-        }
+      targetElement = this.findChatInputElement();
+      if (targetElement) {
+        this.context.logger.debug('Found chat input for Gemini insert');
       }
     }
 
@@ -252,82 +276,262 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   }
 
   getChipAnchors(): ChipAnchors | null {
-    const p = document.querySelector(this.getSelector('chatInput').split(', ')[0].trim())
-      ?? document.querySelector('.ql-editor p, .ql-editor');
-    const input = ((p as HTMLElement | null)?.closest?.('.ql-editor') as HTMLElement | null)
-      ?? (p as HTMLElement | null);
-    if (!input) return null;
-    const container = (input.closest('.text-input-field')
-      ?? input.closest('.input-area-container')
-      ?? input.closest('.input-area')
-      ?? input.parentElement) as HTMLElement | null;
+    const found = this.findChatInputElement();
+    if (!found) return null;
+    // Keep anchoring on the editor wrapper (legacy behaviour) while resolving the visible editor.
+    const input = ((found.closest('.ql-editor') as HTMLElement | null) ?? found);
+    const container = this.resolveComposerRoot(input) as HTMLElement;
     if (!container) return null;
     return { input, container, submitButtonSelector: this.getSelector('submitButton') };
   }
 
   /**
-   * Submit the current text in the Gemini chat input
-   * Enhanced with multiple selector fallbacks and better error handling
+   * Submit the current text in the Gemini chat input.
+   *
+   * Auto-submit runs right after a chip flush, while Gemini may still be re-rendering the
+   * composer. So instead of trusting the first global selector match:
+   *  - only search inside the composer that owns the visible editor;
+   *  - re-evaluate for a few bounded seconds (late render / late enable);
+   *  - click at most one visible, enabled send control and never a stop/mic/attach control;
+   *  - abort if the URL, editor node or draft text changed while waiting, so a delayed submit
+   *    cannot land in another conversation or send text the user edited.
+   * There is deliberately no Enter-key fallback: it can double-send.
    */
-  async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
-    await inputChips.flushBeforeSubmit(this);
-
-    this.context.logger.debug('Attempting to submit Gemini chat input');
-
-    let submitButton: HTMLButtonElement | null = null;
-
-    // Try multiple selectors for better compatibility
-    const selectors = this.getSelector('submitButton').split(', ');
-    for (const selector of selectors) {
-      submitButton = document.querySelector(selector.trim()) as HTMLButtonElement;
-      if (submitButton) {
-        this.context.logger.debug(`Found submit button using selector: ${selector.trim()}`);
-        break;
-      }
-    }
-
-    if (!submitButton) {
-      this.context.logger.error('Could not find Gemini submit button');
-      this.emitExecutionFailed('submitForm', 'Submit button not found');
+  async submitForm(options?: { formElement?: HTMLFormElement; readinessTimeoutMs?: number }): Promise<boolean> {
+    if (this.submitInFlight) {
+      this.context.logger.debug('Gemini submit already in flight; ignoring re-entrant call');
       return false;
     }
+    this.submitInFlight = true;
 
     try {
-      // Check if the button is disabled
-      if (submitButton.disabled) {
-        this.context.logger.warn('Gemini submit button is disabled');
-        this.emitExecutionFailed('submitForm', 'Submit button is disabled');
-        return false;
+      const flushed = await inputChips.flushBeforeSubmit(this);
+      if (!flushed) {
+        // flushBeforeSubmit restores the chips on failure. Sending now could submit a partial draft.
+        return this.abortSubmit('Chip flush failed');
       }
 
-      // Check if the button is visible and clickable
-      const rect = submitButton.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) {
-        this.context.logger.warn('Gemini submit button is not visible');
-        this.emitExecutionFailed('submitForm', 'Submit button is not visible');
-        return false;
+      this.context.logger.debug('Attempting to submit Gemini chat input');
+
+      const composer = this.resolveComposerContext();
+      if (!composer) return this.abortSubmit('Chat composer not found');
+
+      const snapshot: GeminiComposerSnapshot = {
+        href: window.location.href,
+        input: composer.input,
+        draft: this.readDraft(composer.input),
+      };
+      const deadline = Date.now() + Math.max(0, options?.readinessTimeoutMs ?? SUBMIT_READY_TIMEOUT_MS);
+
+      while (true) {
+        const changed = this.getComposerChange(snapshot);
+        if (changed) return this.abortSubmit(`Composer changed while waiting to submit (${changed})`);
+
+        // The wrapper can be replaced while the editor node survives (late render), and a late
+        // send control can appear in a wider known wrapper. Re-anchor around the same editor.
+        const root = this.resolveComposerRoot(snapshot.input);
+        if (!root.isConnected || !root.contains(snapshot.input)) {
+          return this.abortSubmit('Composer wrapper was replaced while waiting to submit');
+        }
+
+        if (this.findVisibleStopControl(root)) {
+          return this.abortSubmit('Gemini is generating (stop control present)');
+        }
+        const submitButton = this.findUsableSendControl(root);
+        if (submitButton) {
+          // Re-check synchronously immediately before the single click.
+          const lateChange = this.getComposerChange(snapshot);
+          if (lateChange) return this.abortSubmit(`Composer changed before click (${lateChange})`);
+
+          submitButton.click();
+          this.emitExecutionCompleted('submitForm', {
+            formElement: options?.formElement?.tagName || 'unknown'
+          }, {
+            success: true,
+            method: 'send-control.click',
+            control: this.describeControl(submitButton)
+          });
+
+          this.context.logger.debug('Gemini send control clicked');
+          return true;
+        }
+
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break;
+        await new Promise(resolve => setTimeout(resolve, Math.min(SUBMIT_POLL_INTERVAL_MS, remaining)));
       }
 
-      // Click the submit button to send the message
-      submitButton.click();
-
-      // Emit success event to the new event system
-      this.emitExecutionCompleted('submitForm', {
-        formElement: options?.formElement?.tagName || 'unknown'
-      }, {
-        success: true,
-        method: 'submitButton.click',
-        buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
-      });
-
-      this.context.logger.debug('Gemini chat input submitted successfully');
-      return true;
+      return this.abortSubmit('No usable Gemini send control found');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.context.logger.error(`Error submitting Gemini chat input: ${errorMessage}`);
       this.emitExecutionFailed('submitForm', errorMessage);
       return false;
+    } finally {
+      this.submitInFlight = false;
     }
+  }
+
+  /**
+   * Resolve the first visible editor, preserving the configured selector priority and falling
+   * back to the first connected match (late render / zero-size empty editor).
+   */
+  private findChatInputElement(): HTMLElement | null {
+    const selectors = this.getSelector('chatInput')
+      .split(',')
+      .map(selector => selector.trim())
+      .filter(Boolean);
+    let firstConnected: HTMLElement | null = null;
+
+    for (const selector of selectors) {
+      let matches: NodeListOf<HTMLElement>;
+      try {
+        matches = document.querySelectorAll<HTMLElement>(selector);
+      } catch {
+        continue;
+      }
+      for (const element of Array.from(matches)) {
+        if (!firstConnected && element.isConnected) firstConnected = element;
+        if (this.isElementVisible(element)) return element;
+      }
+    }
+
+    return firstConnected
+      // Last resort for an empty editor that no configured selector matched (legacy chip fallback).
+      ?? (document.querySelector('.ql-editor') as HTMLElement | null);
+  }
+
+  /**
+   * Nearest known composer wrapper around the editor. If that wrapper has no send-like control
+   * yet, keep climbing known wrappers so a late-rendered button is still found. Never probes the
+   * document or body.
+   */
+  private resolveComposerRoot(input: HTMLElement): Element {
+    const knownSelector = '.input-area-container, .chat-input-container, .input-area, .text-input-field, form';
+    let firstKnown: Element | null = null;
+    let node: Element | null = input.parentElement;
+
+    for (let depth = 0; node && depth < 10 && node !== document.body; depth++, node = node.parentElement) {
+      if (!node.matches(knownSelector)) continue;
+      if (!firstKnown) firstKnown = node;
+      if (this.hasSendLikeControl(node)) return node;
+    }
+
+    return firstKnown ?? input.parentElement ?? input;
+  }
+
+  private resolveComposerContext(): GeminiComposerContext | null {
+    const found = this.findChatInputElement();
+    if (!found) return null;
+    // Track the editor wrapper so the draft check covers every paragraph, not just the first.
+    const input = ((found.closest('.ql-editor') as HTMLElement | null) ?? found);
+    return { input, root: this.resolveComposerRoot(input) };
+  }
+
+  private readDraft(input: HTMLElement): string {
+    if (input.tagName === 'TEXTAREA' || input.tagName === 'INPUT') {
+      return (input as HTMLTextAreaElement).value;
+    }
+    return input.textContent ?? '';
+  }
+
+  private getComposerChange(snapshot: GeminiComposerSnapshot): string | null {
+    if (window.location.href !== snapshot.href) return 'navigation';
+    if (!snapshot.input.isConnected) return 'editor node replaced';
+    if (this.readDraft(snapshot.input) !== snapshot.draft) return 'draft text changed';
+    return null;
+  }
+
+  private isElementVisible(element: HTMLElement): boolean {
+    if (!element.isConnected || element.hidden) return false;
+    if (element.closest('[hidden]')) return false;
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden' && style.visibility !== 'collapse';
+  }
+
+  private isControlDisabled(button: HTMLButtonElement): boolean {
+    return button.disabled
+      || button.getAttribute('disabled') !== null
+      || button.getAttribute('aria-disabled') === 'true'
+      || button.classList.contains('disabled')
+      || button.classList.contains('mat-mdc-button-disabled');
+  }
+
+  private controlVocabulary(control: Element): string {
+    const className = typeof control.className === 'string' ? control.className : '';
+    return [
+      control.getAttribute('aria-label'),
+      control.getAttribute('title'),
+      control.getAttribute('data-test-id'),
+      control.getAttribute('data-testid'),
+      className,
+      control.textContent,
+    ].filter(Boolean).join(' ');
+  }
+
+  private isNonSendControl(control: Element): boolean {
+    return NON_SEND_CONTROL_RE.test(this.controlVocabulary(control));
+  }
+
+  private looksLikeSendControl(control: Element): boolean {
+    if (!(control instanceof HTMLButtonElement)) return false;
+    if (this.isNonSendControl(control) || /feedback|反馈|意見回饋|麦克风|麥克風|语音|語音/i.test(this.controlVocabulary(control))) return false;
+
+    const className = typeof control.className === 'string' ? control.className : '';
+    const testId = control.getAttribute('data-test-id')
+      ?? control.getAttribute('data-testid')
+      ?? '';
+    const ariaLabel = control.getAttribute('aria-label') ?? '';
+    const title = control.getAttribute('title') ?? '';
+
+    return /(?:^|\s)send-button(?:\s|$)/.test(className)
+      || SEND_HINT_RE.test(testId)
+      || SEND_HINT_RE.test(ariaLabel)
+      || SEND_HINT_RE.test(title)
+      || control.matches(this.getSelector('submitButton'));
+  }
+
+  private isUsableSendControl(control: Element): control is HTMLButtonElement {
+    return control instanceof HTMLButtonElement
+      && this.looksLikeSendControl(control)
+      && !this.isControlDisabled(control)
+      && this.isElementVisible(control);
+  }
+
+  /** First usable send control in document order; hidden/disabled candidates are skipped. */
+  private findUsableSendControl(root: Element): HTMLButtonElement | null {
+    for (const control of Array.from(root.querySelectorAll('button'))) {
+      if (this.isUsableSendControl(control)) return control;
+    }
+    return null;
+  }
+
+  private findVisibleStopControl(root: Element): HTMLButtonElement | null {
+    for (const control of Array.from(root.querySelectorAll('button'))) {
+      if (!this.isElementVisible(control)) continue;
+      if (STOP_CONTROL_RE.test(this.controlVocabulary(control))) return control;
+    }
+    return null;
+  }
+
+  private hasSendLikeControl(root: Element): boolean {
+    return Array.from(root.querySelectorAll('button')).some(control => this.looksLikeSendControl(control));
+  }
+
+  private describeControl(control: HTMLButtonElement): string {
+    const aria = control.getAttribute('aria-label');
+    const testId = control.getAttribute('data-test-id') ?? control.getAttribute('data-testid');
+    return [aria, testId, control.className]
+      .filter(value => typeof value === 'string' && value.length > 0)
+      .join(' | ') || 'send-control';
+  }
+
+  private abortSubmit(reason: string): false {
+    this.context.logger.warn(`Gemini submit aborted: ${reason}`);
+    this.emitExecutionFailed('submitForm', reason);
+    return false;
   }
 
   /**

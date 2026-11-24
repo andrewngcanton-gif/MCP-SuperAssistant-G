@@ -8,6 +8,10 @@ import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-ty
 // } from '../../components/websites/aistudio/chatInputHandler';
 import { createLogger } from '@extension/shared/lib/logger';
 import { inputChips } from '../../services/input-chips';
+import {
+  abortExtensionSubmission,
+  beginExtensionSubmission,
+} from '../../render_prescript/src/provenance/aistudioTurnGate';
 
 /**
  * AI Studio Adapter for Google AI Studio (aistudio.google.com)
@@ -408,14 +412,33 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    * Submit the current text in the AI Studio chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
-  async submitForm(options?: { formElement?: HTMLFormElement }): Promise<boolean> {
-    await inputChips.flushBeforeSubmit(this);
+  async submitForm(options?: { formElement?: HTMLFormElement; canProceed?: () => boolean }): Promise<boolean> {
+    const flushed = await inputChips.flushBeforeSubmit(this);
+    if (!flushed) {
+      // flushBeforeSubmit restores chips on failure; never send a partial draft.
+      this.emitExecutionFailed('submitForm', 'Chip flush failed');
+      return false;
+    }
+
+    if (options?.canProceed && !options.canProceed()) {
+      this.emitExecutionFailed('submitForm', 'Automation context changed before submit');
+      return false;
+    }
 
     this.context.logger.debug('Attempting to submit AI Studio chat input');
 
+    // The caller's canProceed still refers to the *parent* submission context. Keep that context
+    // valid through flush/readiness/fallback checks; only hand off to the next provenance cycle
+    // immediately before the actual send dispatch.
+    let beganNextCycle = false;
+    const beginForDispatch = (): void => {
+      beginExtensionSubmission();
+      beganNextCycle = true;
+    };
+
     try {
       // Use the proven chatInputHandler method
-      const success = await submitChatInput();
+      const success = await submitChatInput(5000, options?.canProceed, beginForDispatch);
 
       if (success) {
         // Emit success event to the new event system
@@ -429,11 +452,13 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
         this.context.logger.debug('AI Studio chat input submitted successfully via chatInputHandler');
         return true;
       } else {
+        if (beganNextCycle) abortExtensionSubmission();
         this.context.logger.error('Failed to submit using chatInputHandler');
         this.emitExecutionFailed('submitForm', 'chatInputHandler failed to submit');
         return false;
       }
     } catch (error) {
+      if (beganNextCycle) abortExtensionSubmission();
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.context.logger.error(`Error submitting AI Studio chat input: ${errorMessage}`);
       this.emitExecutionFailed('submitForm', errorMessage);
@@ -1816,13 +1841,23 @@ export const attachFileToChatInput = async (file: File): Promise<boolean> => {
  * Submit the current chat input (equivalent to pressing Enter)
  * @returns True if submission was successful, false otherwise
  */
-export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
+export const submitChatInput = (
+  maxWaitTime = 5000,
+  canProceed?: () => boolean,
+  onBeforeDispatch?: () => void,
+): Promise<boolean> => {
   return new Promise(resolve => {
     try {
       const chatInput = findChatInputElement();
 
       if (!chatInput) {
         logger.debug('Could not find chat input to submit');
+        resolve(false);
+        return;
+      }
+
+      if (canProceed && !canProceed()) {
+        logger.debug('Submission context changed before AI Studio send');
         resolve(false);
         return;
       }
@@ -1849,12 +1884,17 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
         logger.debug(`Found submit button (${submitButton.getAttribute('aria-label') || 'unknown'})`);
 
         // Function to check if button is enabled and click it
-        const tryClickingButton = () => {
+        const tryClickingButton = (): 'clicked' | 'waiting' | 'failed' => {
+          if (canProceed && !canProceed()) {
+            logger.debug('Submission context changed while waiting for AI Studio send');
+            resolve(false);
+            return 'failed';
+          }
           const button = findSubmitButton();
           if (!button) {
             logger.debug('Submit button no longer found');
             resolve(false);
-            return;
+            return 'failed';
           }
 
           // Check if the button is disabled
@@ -1865,11 +1905,20 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
             button.classList.contains('disabled');
 
           if (!isDisabled) {
+            if (canProceed && !canProceed()) {
+              logger.debug('Submission context changed immediately before AI Studio click');
+              resolve(false);
+              return 'failed';
+            }
+            // Hand off to the next submission cycle only at the final success action.
+            onBeforeDispatch?.();
             logger.debug('Submit button is enabled, clicking it');
             button.click();
             resolve(true);
+            return 'clicked';
           } else {
             logger.debug('Submit button is disabled, waiting...');
+            return 'waiting';
           }
         };
 
@@ -1878,14 +1927,31 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
         const checkInterval = 200; // Check every 200ms
 
         const intervalId = setInterval(() => {
+          if (canProceed && !canProceed()) {
+            clearInterval(intervalId);
+            logger.debug('Submission context changed; aborting AI Studio send wait');
+            resolve(false);
+            return;
+          }
           elapsedTime += checkInterval;
 
-          tryClickingButton();
+          const result = tryClickingButton();
+          if (result !== 'waiting') {
+            clearInterval(intervalId);
+            return;
+          }
 
           // If we've waited too long, try alternative methods
           if (elapsedTime >= maxWaitTime) {
             clearInterval(intervalId);
             logger.debug(`Button remained disabled for ${maxWaitTime}ms, trying alternative methods`);
+
+            if (canProceed && !canProceed()) {
+              logger.debug('Submission context changed before AI Studio fallback');
+              resolve(false);
+              return;
+            }
+            onBeforeDispatch?.();
 
             // Method 2: Simulate Enter key press
             logger.debug('Simulating Enter key press as fallback');
@@ -1941,15 +2007,22 @@ export const submitChatInput = (maxWaitTime = 5000): Promise<boolean> => {
         }, checkInterval);
 
         // Initial check - maybe it's already enabled
-        tryClickingButton();
+        const initialResult = tryClickingButton();
 
-        // If the button is already enabled and clicked, clear the interval
-        if (submitButton && !submitButton.disabled) {
+        // If the button was clicked or the attempt failed, no polling is needed.
+        if (initialResult !== 'waiting') {
           clearInterval(intervalId);
         }
       } else {
         // If no button found, proceed with alternative methods immediately
         logger.debug('No submit button found, trying alternative methods');
+
+        if (canProceed && !canProceed()) {
+          logger.debug('Submission context changed before AI Studio fallback');
+          resolve(false);
+          return;
+        }
+        onBeforeDispatch?.();
 
         // Method 2: Simulate Enter key press
         logger.debug('Simulating Enter key press as fallback');

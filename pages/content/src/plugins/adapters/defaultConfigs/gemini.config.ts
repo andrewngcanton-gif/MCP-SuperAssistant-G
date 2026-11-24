@@ -9,7 +9,7 @@ export const GEMINI_DEFAULT_CONFIG: AdapterConfig = {
   selectors: {
     // Core selectors - essential for basic functionality
     chatInput: 'div.ql-editor.textarea.new-input-ui p, .ql-editor p, div[contenteditable="true"]',
-    submitButton: 'button.mat-mdc-icon-button.send-button, button[aria-label*="Send"], button[data-testid="send-button"]',
+    submitButton: 'button.send-button, button.mat-mdc-icon-button.send-button, button[aria-label*="Send"], button[data-test-id="send-button"], button[data-testid="send-button"]',
     fileUploadButton: 'button[aria-label="Add files"], button[aria-label*="attach"]',
     fileInput: 'input[type="file"]',
     mainPanel: '.chat-web, .main-content, .conversation-container',

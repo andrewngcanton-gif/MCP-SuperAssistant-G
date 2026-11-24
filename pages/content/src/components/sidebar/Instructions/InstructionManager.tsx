@@ -1,67 +1,19 @@
 import type React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 // import { generateInstructions } from './instructionGenerator';
-import { generateInstructionsJson } from './instructionGeneratorJson';
-import { generateInstructionsCompact } from './instructionGeneratorCompact';
+import { generateInstructionsForPreferences } from './instructionPipeline';
 import { useUserPreferences, useToolEnablement } from '../../../hooks';
 import { useToolStore } from '../../../stores/tool.store';
 import { cn } from '@src/lib/utils';
 import { logMessage } from '@src/utils/helpers';
 import { createLogger } from '@extension/shared/lib/logger';
 
-// Create a global shared state for instructions
+// Shared instruction broadcast. Re-exported so existing importers (MCP popover, sidebar)
+// keep their current import path.
+import { instructionsState } from './instructionsState';
+export { instructionsState } from './instructionsState';
 
 const logger = createLogger('InstructionManager');
-
-export const instructionsState = {
-  instructions: '',
-  updating: false, // Flag to prevent circular updates
-  setInstructions: (newInstructions: string) => {
-    // Don't update if the value hasn't changed
-    if (instructionsState.instructions === newInstructions) {
-      return;
-    }
-
-    // Prevent recursive updates
-    if (instructionsState.updating) {
-      logger.warn('[InstructionsState] Prevented recursive update');
-      return;
-    }
-
-    // Set flag to prevent circular updates
-    instructionsState.updating = true;
-    instructionsState.instructions = newInstructions;
-
-    logger.debug(`Broadcasting instruction update to ${instructionsState.listeners.length} listeners`);
-
-    // Call all registered listeners when instructions change
-    try {
-      instructionsState.listeners.forEach((listener, index) => {
-        try {
-          listener(newInstructions);
-        } catch (error) {
-          logger.error(`Error in listener ${index}:`, error);
-        }
-      });
-    } finally {
-      // Reset flag immediately after all listeners have been called
-      instructionsState.updating = false;
-    }
-  },
-  listeners: [] as ((instructions: string) => void)[],
-  subscribe: (listener: (instructions: string) => void) => {
-    instructionsState.listeners.push(listener);
-    logger.debug(`Listener subscribed (total: ${instructionsState.listeners.length})`);
-    // Return unsubscribe function
-    return () => {
-      const index = instructionsState.listeners.indexOf(listener);
-      if (index !== -1) {
-        instructionsState.listeners.splice(index, 1);
-        logger.debug(`Listener unsubscribed (total: ${instructionsState.listeners.length})`);
-      }
-    };
-  },
-};
 
 interface InstructionManagerProps {
   adapter: any;
@@ -157,10 +109,22 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
     //   return generateInstructions(enabledTools, customInstructions, customInstructionsEnabled);
     // }
 
-    return preferences.promptMode === 'full'
-      ? generateInstructionsJson(enabledTools, customInstructions, customInstructionsEnabled)
-      : generateInstructionsCompact(enabledTools, customInstructions, customInstructionsEnabled);
-  }, [enabledTools, customInstructions, customInstructionsEnabled, preferences.promptMode]);
+    return generateInstructionsForPreferences(
+      {
+        promptMode: preferences.promptMode,
+        customInstructions,
+        customInstructionsEnabled,
+        useRtkWithWebCodex: preferences.useRtkWithWebCodex || false,
+      },
+      enabledTools,
+    );
+  }, [
+    enabledTools,
+    customInstructions,
+    customInstructionsEnabled,
+    preferences.promptMode,
+    preferences.useRtkWithWebCodex,
+  ]);
 
   // Memoize the actual current instructions to prevent unnecessary re-calculations
   const currentInstructions = useMemo(() => {
@@ -359,6 +323,29 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
 
   return (
     <div className="space-y-3 pt-1">
+      {/* RTK / WebCodex opt-in */}
+      <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800 sidebar-card">
+        <div className="px-3 py-2 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-slate-700 dark:text-slate-300">Use RTK with WebCodex</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+              Adds RTK output-compression guidance to generated instructions when a WebCodex run tool is enabled. Off
+              by default.
+            </div>
+          </div>
+          <label className="flex items-center gap-1.5 shrink-0">
+            <input
+              type="checkbox"
+              aria-label="Use RTK with WebCodex"
+              checked={preferences.useRtkWithWebCodex}
+              onChange={e => updatePreferences({ useRtkWithWebCodex: e.target.checked })}
+              className="h-4 w-4 rounded accent-indigo-600"
+            />
+            <span className="text-xs text-slate-500 dark:text-slate-400">Enable</span>
+          </label>
+        </div>
+      </div>
+
       {/* Custom Instructions Panel */}
       <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800 sidebar-card">
         <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
