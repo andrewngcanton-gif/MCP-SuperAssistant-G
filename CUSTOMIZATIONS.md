@@ -2,9 +2,9 @@
 
 This repository is a public community build based on MCP SuperAssistant v0.7.3.
 
-- main contains the upstream MCP SuperAssistant source at commit 30bb2045e630d7db3547179f374c15af6f308924.
+- main starts from a source snapshot of upstream MCP SuperAssistant commit 30bb2045e630d7db3547179f374c15af6f308924.
 - custom contains the local integrated build and its custom changes.
-- Tag baseline-v0.7.3-local identifies the local integrated baseline on custom.
+- Tag baseline-v0.7.3-local preserves the original integrated baseline from before the branch history was rebuilt.
 
 This repository is not an official release of MCP SuperAssistant. The upstream project is available at https://github.com/srbhptl39/MCP-SuperAssistant.
 
@@ -46,4 +46,4 @@ The upstream project is distributed under the MIT License. The original LICENSE 
 
 ## Repository branches
 
-The default branch is custom. It omits the upstream Dependabot schedule to keep the repository focused on main and custom. The main branch retains the original upstream configuration. The baseline-v0.7.3-local tag identifies the integrated source before repository housekeeping.
+The default branch is custom. It omits the upstream Dependabot schedule to keep the repository focused on main and custom. The main branch retains the original upstream configuration. The two branches share a snapshot of the upstream v0.7.3 source. The original upstream commit ID is recorded in the snapshot commit.
