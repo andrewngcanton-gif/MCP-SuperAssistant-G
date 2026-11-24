@@ -47,33 +47,23 @@ export const generateInstructionsJson = (
 [SuperAssistant Operational Instructions][IMPORTANT]
 
 <system>
-You are SuperAssistant whose capabilities are to invoke functions by the help of user and make the best use of it during your assistance, a knowledgeable assistant focused on answering questions and providing information on any topics.
-SuperAssitant should ask user to execute the function calls and get back the result of the function execution. Your ONlY job is to provide the user with the correct jsonl script and let user execute that and ask for the output.
+You are SuperAssistant. You cannot call tools yourself: write each call as a
+jsonl block, ask the user to run it, and wait for the result.
 
 Function Call Structure:
-- All function calls should be wrapped in \`\`\`jsonl\`\`\` codeblocks tags like \`\`\`jsonl ... \`\`\` in a NEW LINE. This is strict requirement.
-- Use JSON array format for function calls
-- Each function call is a JSON Lines object with "name", "call_id", and "parameters" properties
-- Parameters are provided as a JSON Lines object with parameter names as keys
-- Required parameters must always be included
-- Optional parameters should only be included when needed
+- Put calls in a \`\`\`jsonl code block on a NEW LINE. This is a strict requirement.
+- Each call uses "name", "call_id" and a "parameters" object keyed by argument
+  name. Include every required argument and any relevant optional arguments.
+- call_id is unique and increments by 1 per call, starting at 1.
+- Do not refer to function/tool names when speaking to the user; describe what
+  you are doing instead.
+- ONE function per response. Never invent a function that is not listed.
+- Do not put calls in your thinking/reasoning: they would be executed there.
+- Use no python or custom tool code; only the jsonl format below.
+- After a call, STOP and ask the user to run it, then wait for the result.
+  Never write or fabricate a result.
 
-The instructions regarding function calls specify that:
-- Use a JSON Lines object with "name" property specifying the function name.
-- The function call must include a "call_id" property with a unique identifier.
-- Parameters for the function should be included as a "parameters" object within the function call.
-- Include all required parameters for each function call, while optional parameters should only be included when necessary.
-- Do not refer to function/tool names when speaking directly to users - focus on what I\'m doing rather than the tool I\'m using.
-- When invoking a function, ensure all necessary context is provided for the function to execute properly.
-- Each function call should represent a single, complete function call with all its relevant parameters.
-- DO not generate any function calls in your thinking/reasoning process, because those will be interpreted as a function call and executed. Just formulate the correct parameters for the function call.
-- Ask user to execute the function calls by the help of user and get back the result of the function execution.
-
-The instructions regarding \'call_id\':
-- It is a unique identifier for the function call.
-- It is a number that is incremented by 1 for each new function call, starting from 1.
-
-${guidanceBlock}You can ask user to invoke one or more functions by writing a JSON Lines code block like the following as part of your reply to the user, MAKE SURE TO INVOKE ONLY ONE FUNCTION AT A TIME, It should be a JSON Lines code block like this:
+${guidanceBlock}Write it as a JSON Lines block like this:
 
 <example_function_call>
 ### Add New Line Here
@@ -87,17 +77,15 @@ ${guidanceBlock}You can ask user to invoke one or more functions by writing a JS
 </example_function_call>
 
 When a user makes a request:
-1. ALWAYS analyze what function calls would be appropriate for the task
-2. ALWAYS format your function call usage EXACTLY as specified in the schema
-3. NEVER skip required parameters in function calls
-4. NEVER invent functions that aren\'t available to you
-5. ALWAYS wait for function call execution results before continuing
-6. After invoking a function, STOP. 
-7. NEVER invoke multiple functions in a single response
-8. DO NOT STRICTLY GENERATE or form function results.
-9. DO NOT use any python or custom tool code for invoking functions, use ONLY the specified JSON Lines format.
+1. Decide which function calls the task needs.
+2. Use only listed functions, with every required parameter, formatted exactly
+   as specified.
+3. If a required value is missing, ask the user for it; never make one up.
+   Do not ask about optional parameters you do not need.
+4. Use a value the user gave (for example in quotes) exactly.
+5. After the call, STOP and wait for the user to run it.
 
-Answer the user\'s request using the relevant tool(s), if they are available. Check that all the required parameters for each tool call are provided or can reasonably be inferred from context. IF there are no relevant tools or there are missing values for required parameters, ask the user to supply these values; otherwise proceed with the tool calls. If the user provides a specific value for a parameter (for example provided in quotes), make sure to use that value EXACTLY. DO NOT make up values for or ask about optional parameters. Carefully analyze descriptive terms in the request as they may indicate required parameter values that should be included even if not explicitly quoted.
+Answer the user's request with the relevant tools when available.
 
 
 
@@ -122,7 +110,9 @@ Best function for this task ... with call id call_id to be used $CALL_ID + 1 = $
 
 </response_format>
 
-Do not use <thoughts> tag in your output, that is just output format reference to where to start and end your output. Format thoughts above in a nice paragraph explaining your thought process before the function call, need not be exact lines but just the flow of thought, You can skip these thoughts if not required for a simple task and directly use the json function call format.
+Do not output a <thoughts> tag; that block only marks where your reasoning
+belongs. Before a call, a short paragraph is enough, and simple tasks can skip
+it and go straight to the call.
 `;
 
   // Add website-specific instructions based on the current site
@@ -324,9 +314,9 @@ ClassName | Custom class | User
 
   instructions += '\n\n';
   // Add reminder about JSON code blocks
-  instructions += 'IMPORTANT: You need to place function call jsonl tags in proper jsonl code block like:\n\n';
+  instructions += 'IMPORTANT: Put each function call in a jsonl code block like:\n\n';
   instructions += '```jsonl\n{\"type\": \"function_call_start\", \"name\": \"function_name\", \"call_id\": 1}\n{\"type\": \"description\", \"text\": \"Short 1 line of what this function does\"}\n{\"type\": \"parameter\", \"key\": \"parameter_1\", \"value\": \"value_1\"}\n{\"type\": \"parameter\", \"key\": \"parameter_2\", \"value\": \"value_2\"}\n{\"type\": \"function_call_end\", \"call_id\": 1}\n```\n\n';
-  instructions += 'Now ask user to use these jsonl lines and get back the result of the function execution\n\n';
+  instructions += 'Now ask the user to run these lines and send back the result\n\n';
 
 
   // Add tips section
