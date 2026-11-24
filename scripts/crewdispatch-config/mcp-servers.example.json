@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "webcodex": {
+      "type": "streamable-http",
+      "url": "http://127.0.0.1:60143/mcp"
+    }
+  },
+  "crewdispatch": {
+    "enabled": false,
+    "command": "node",
+    "args": ["<absolute path to the installed CrewDispatch MCP entrypoint>"]
+  }
+}

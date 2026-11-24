@@ -18,6 +18,10 @@ tsconfig.tsbuildinfo
 **/.env.*
 .env2
 
+# CrewDispatch config generator local input/output (keep the tracked example)
+/scripts/crewdispatch-config/mcp-servers.json
+/scripts/crewdispatch-config/mcp-servers.generated.json
+
 # stray junk (repo uses pnpm; .gitt is not a real dir)
 **/bun.lock
 **/.gitt
