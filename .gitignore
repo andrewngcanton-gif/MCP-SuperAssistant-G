@@ -1,0 +1,61 @@
+# dependencies
+**/node_modules
+
+# build output
+**/dist
+**/build
+**/dist-zip
+**/coverage
+**/tailwind-output.css
+chrome-extension/manifest.js
+chrome-extension/pre-build.tsconfig.tsbuildinfo
+eslint.config.js
+tsconfig.tsbuildinfo
+**/.turbo
+
+# env (keep .example.env tracked as the template)
+**/.env
+**/.env.*
+.env2
+
+# stray junk (repo uses pnpm; .gitt is not a real dir)
+**/bun.lock
+**/.gitt
+
+# local scratch docs (untracked notes, not part of the repo)
+docs/
+
+# editor / OS
+.DS_Store
+.idea
+.vscode
+.claude
+.trash/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev-debug.log
+
+# task-master
+tasks.json
+tasks/
+
+# Local-only source (intentionally untracked; do not commit — may hold local config)
+chrome-extension/public/icon-16.png
+chrome-extension/src/mcpclient/architecture-option-3-plugin-based.md
+pages/content/src/plugins/adapters/gemini-migration-guide.md
+pages/content/src/plugins/adapters/scira.adapter.ts
+pages/content/src/plugins/adapters/defaultConfigs/README.md
+pages/content/src/shared/firebase-config.ts
+pages/content/src/utils/migration-bridge.ts
+pages/content/src/utils/siteAdapter.ts
+pages/content/src/utils/themeDetector.ts
