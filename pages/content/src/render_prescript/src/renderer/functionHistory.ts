@@ -12,6 +12,12 @@ import {
   getPreviousExecution,
 } from '../mcpexecute/storage';
 import { displayResult } from './components';
+import {
+  createAistudioInvocationId,
+  getAistudioProvenance,
+  isAistudioHost,
+  registerAistudioInvocation,
+} from '../provenance/aistudioTurnGate';
 import { createLogger } from '@extension/shared/lib/logger';
 
 // Add type declaration for global mcpClient access
@@ -115,6 +121,15 @@ export const updateHistoryPanel = (
 
   // Handle re-execution with async mcpClient
   reExecuteBtn.onclick = async () => {
+    const fnBlock = historyPanel.closest('.function-block');
+    // Deliberate "Run again" is a new invocation. A current card may auto-deliver its result; a
+    // historical card has no provenance and therefore stays manual-only.
+    const provenance = getAistudioProvenance(fnBlock);
+    const invocationId = isAistudioHost() ? createAistudioInvocationId('manual') : null;
+    if (provenance && invocationId) {
+      registerAistudioInvocation(provenance, executionData.callId, invocationId);
+    }
+
     // Create results panel if it doesn't exist
     let resultsPanel = historyPanel.parentElement?.querySelector(
       `.function-results-panel[data-call-id="${executionData.callId}"]`,
@@ -144,7 +159,6 @@ export const updateHistoryPanel = (
     loadingIndicator.textContent = 'Executing...';
     resultsPanel.appendChild(loadingIndicator);
 
-    const fnBlock = historyPanel.closest('.function-block');
     fnBlock?.classList.remove('exec-success', 'exec-error');
     fnBlock?.classList.add('exec-running');
     const t0 = performance.now();
@@ -170,7 +184,10 @@ export const updateHistoryPanel = (
         const result = await mcpClient.callTool(executionData.functionName, executionData.params);
 
         fnBlock?.classList.replace('exec-running', 'exec-success');
-        displayResult(resultsPanel, loadingIndicator, true, result, performance.now() - t0);
+        displayResult(resultsPanel, loadingIndicator, true, result, performance.now() - t0, {
+          provenance,
+          invocationId,
+        });
 
         // Update the execution record with new timestamp
         // Always use the current URL context when storing execution data
@@ -198,7 +215,10 @@ export const updateHistoryPanel = (
         }
         
         fnBlock?.classList.replace('exec-running', 'exec-error');
-        displayResult(resultsPanel, loadingIndicator, false, errorMessage, performance.now() - t0);
+        displayResult(resultsPanel, loadingIndicator, false, errorMessage, performance.now() - t0, {
+          provenance,
+          invocationId,
+        });
       }
 
     } catch (error: any) {
@@ -212,6 +232,7 @@ export const updateHistoryPanel = (
         false,
         `Unexpected error: ${errorMessage}`,
         performance.now() - t0,
+        { provenance, invocationId },
       );
     }
   };

@@ -25,9 +25,14 @@ import {
 } from '../render_prescript/src/observer/streamObserver';
 import { preExistingIncompleteBlocks } from '../render_prescript/src/observer/stalledStreamHandler';
 import {
+  cancelAistudioInFlightWork,
   cancelAistudioSubmission,
+  completeAistudioInvocation,
+  getAistudioComposerElement,
+  getAistudioComposerSnapshot,
+  isAistudioDeliveryAuthorized,
   isAistudioHost,
-  isAistudioProvenanceCurrent,
+  isAistudioSendControlReady,
   type AistudioProvenance,
 } from '../render_prescript/src/provenance/aistudioTurnGate';
 import { createLogger } from '@extension/shared/lib/logger';
@@ -99,6 +104,8 @@ export interface ToolExecutionCompleteDetail {
   functionName?: string;
   /** AI Studio: proof that the card belongs to the current submission cycle. */
   provenance?: AistudioProvenance | null;
+  /** AI Studio: stable identity of the actual tool invocation that produced this result. */
+  invocationId?: string | null;
   manual?: boolean;
 }
 
@@ -113,6 +120,26 @@ export interface AutomationState {
 }
 
 /**
+ * A real, already-inserted AI Studio result whose composer send control was busy. This is
+ * page-scoped state only: it holds the exact composer, the draft it must still contain, and the
+ * invocations it represents. It is cancelled on any scope/setting/enablement change and removed
+ * after one successful click (or one definitive failure).
+ */
+interface DeferredSubmit {
+  details: Set<ToolExecutionCompleteDetail>;
+  invocationIds: Set<string>;
+  composer: HTMLElement;
+  container: HTMLElement;
+  expectedDraft: string;
+  conversation: string;
+  observer: MutationObserver;
+  interval: number;
+  inputListener: () => void;
+  attempting: boolean;
+  cancelled: boolean;
+}
+
+/**
  * Automation Service Class
  * Handles all automation logic for MCP tool execution results
  */
@@ -120,6 +147,8 @@ export class AutomationService {
   private static instance: AutomationService | null = null;
   private isInitialized = false;
   private eventListener: ((event: Event) => void) | null = null;
+  private composerWriteListener: ((event: Event) => void) | null = null;
+  private chipCaptureListener: ((event: Event) => void) | null = null;
   // Coalesced auto-submit: one message can produce N tool results (multi-call).
   // We submit ONCE after the whole batch settles instead of once per result.
   private pendingSubmitTimer: number | null = null;
@@ -133,6 +162,35 @@ export class AutomationService {
   private cancelledContexts = new WeakSet<ToolExecutionCompleteDetail>();
   private activeEffects = new Map<ToolExecutionCompleteDetail, 'insert' | 'submit'>();
   private trackedContexts = new Set<ToolExecutionCompleteDetail>();
+  // AI Studio logical delivery: one insert/submit per actual invocation, even if a remount or the
+  // page redisplay path dispatches the same completion several times. Keyed by the renderer's
+  // invocation id (page session + turn identity + call id), never by DOM card id.
+  private invocationStates = new Map<string, { status: 'claimed' | 'delivered'; at: number }>();
+  private loggedDuplicateInvocations = new Set<string>();
+  // A single scoped deferred send for the active AI Studio composer. One record, one observer and
+  // one readiness tick; multiple late results in the same batch add their invocations to it.
+  private deferredSubmit: DeferredSubmit | null = null;
+  // Draft captured immediately after each successful insert. A busy wait must pin this value, not
+  // the (possibly user-edited) composer value read five seconds later.
+  private insertedSnapshots = new Map<
+    string,
+    {
+      draft: string;
+      element: HTMLElement;
+      conversation: string;
+      /** Chip-captured result: logical insert returned before the physical textarea write. */
+      pendingChip?: boolean;
+      /** Exact payload of the chip-captured result, used to adopt only our own physical write. */
+      insertedText?: string;
+    }
+  >();
+  /** Chip captures reported by the AI Studio adapter, matched to the next logical insert. */
+  private pendingChipCaptures: Array<{ element: HTMLElement; text: string }> = [];
+  /** Composer values the extension itself wrote; a chip capture may extend these, never a user draft. */
+  private ownedComposerValues = new WeakMap<HTMLElement, Set<string>>();
+  // All results that belong to the coalesced submit currently being attempted. If it turns busy,
+  // every already-inserted result in the composer is part of the one deferred send.
+  private submitBatchDetails = new Set<ToolExecutionCompleteDetail>();
 
   // Private constructor for singleton pattern
   private constructor() {}
@@ -192,6 +250,14 @@ export class AutomationService {
       document.removeEventListener('mcp:tool-execution-complete', this.eventListener);
       this.eventListener = null;
     }
+    if (this.composerWriteListener) {
+      document.removeEventListener('mcp:aistudio-composer-write', this.composerWriteListener);
+      this.composerWriteListener = null;
+    }
+    if (this.chipCaptureListener) {
+      document.removeEventListener('mcp:aistudio-chip-captured', this.chipCaptureListener);
+      this.chipCaptureListener = null;
+    }
 
     // Drop any delayed submit so a torn-down page cannot submit into a later conversation.
     if (this.pendingSubmitTimer !== null) {
@@ -204,6 +270,13 @@ export class AutomationService {
     this.storeUnsubscribers = [];
     this.activeEffects.clear();
     this.trackedContexts.clear();
+    this.cancelDeferredSubmit('service cleanup');
+    this.insertedSnapshots.clear();
+    this.pendingChipCaptures = [];
+    this.ownedComposerValues = new WeakMap();
+    this.submitBatchDetails.clear();
+    this.invocationStates.clear();
+    this.loggedDuplicateInvocations.clear();
 
     this.isInitialized = false;
     logger.debug('[AutomationService] Automation service cleaned up');
@@ -225,6 +298,16 @@ export class AutomationService {
 
     // Add event listener to document
     document.addEventListener('mcp:tool-execution-complete', this.eventListener);
+    if (this.composerWriteListener) {
+      document.removeEventListener('mcp:aistudio-composer-write', this.composerWriteListener);
+    }
+    this.composerWriteListener = (event: Event) => this.handlePhysicalComposerWrite(event);
+    document.addEventListener('mcp:aistudio-composer-write', this.composerWriteListener);
+    if (this.chipCaptureListener) {
+      document.removeEventListener('mcp:aistudio-chip-captured', this.chipCaptureListener);
+    }
+    this.chipCaptureListener = (event: Event) => this.handleChipCaptured(event);
+    document.addEventListener('mcp:aistudio-chip-captured', this.chipCaptureListener);
     logger.debug('[AutomationService] Tool execution event listener registered');
   }
 
@@ -248,8 +331,16 @@ export class AutomationService {
       this.storeUnsubscribers.push(
         useUIStore.subscribe(state => {
           const preferences: any = state.preferences;
-          if (previousPreferences?.autoInsert && !preferences?.autoInsert) this.cancelActiveEffects('insert');
-          if (previousPreferences?.autoSubmit && !preferences?.autoSubmit) this.cancelActiveEffects('submit');
+          const autoInsertOff = previousPreferences?.autoInsert && !preferences?.autoInsert;
+          const autoSubmitOff = previousPreferences?.autoSubmit && !preferences?.autoSubmit;
+          const autoExecuteOff = previousPreferences?.autoExecute && !preferences?.autoExecute;
+          if (autoInsertOff) this.cancelActiveEffects('insert');
+          if (autoSubmitOff) this.cancelActiveEffects('submit');
+          // A switch turning off cancels work that was already in flight; re-enabling must not
+          // resurrect a result that started under the old setting.
+          if ((autoInsertOff || autoSubmitOff || autoExecuteOff) && isAistudioHost()) {
+            cancelAistudioSubmission();
+          }
           previousPreferences = preferences;
           void this.exposeAutomationStateToWindow();
         }),
@@ -258,7 +349,10 @@ export class AutomationService {
         useToolStore.subscribe(state => {
           const disabledSomething = Array.from(previousEnabled).some(name => !state.enabledTools.has(name));
           if (disabledSomething && state.enabledTools.size === 0 && isAistudioHost()) cancelAistudioSubmission();
-          if (disabledSomething) this.cancelActiveEffects();
+          if (disabledSomething) {
+            this.cancelActiveEffects();
+            if (isAistudioHost()) cancelAistudioInFlightWork();
+          }
           previousEnabled = new Set(state.enabledTools);
           publishToolEnablement(state.enabledTools);
           void this.exposeAutomationStateToWindow();
@@ -281,6 +375,342 @@ export class AutomationService {
   }
 
   /**
+   * Claim a logical AI Studio delivery before any async effect starts. A duplicate completion for
+   * the same invocation is dropped on arrival, not merely deduped at the final send.
+   */
+  private claimInvocationDelivery(invocationId?: string | null): boolean {
+    if (!invocationId) return true;
+    const now = Date.now();
+    for (const [id, state] of this.invocationStates) {
+      if (now - state.at > 30 * 60 * 1000) this.invocationStates.delete(id);
+    }
+    if (this.invocationStates.has(invocationId)) {
+      if (!this.loggedDuplicateInvocations.has(invocationId)) {
+        this.loggedDuplicateInvocations.add(invocationId);
+        logger.debug('[AutomationService] Duplicate logical delivery ignored', { invocationId });
+      }
+      return false;
+    }
+    this.invocationStates.set(invocationId, { status: 'claimed', at: now });
+    return true;
+  }
+
+  private markInvocationDelivered(invocationId?: string | null): void {
+    if (!invocationId) return;
+    const state = this.invocationStates.get(invocationId);
+    if (state) {
+      state.status = 'delivered';
+      state.at = Date.now();
+    }
+  }
+
+  /** Adapter reported that a result was captured as a chip (no textarea write yet). */
+  private handleChipCaptured(event: Event): void {
+    if (!isAistudioHost()) return;
+    const detail = (event as CustomEvent).detail as { element?: HTMLElement; text?: string } | undefined;
+    if (!detail?.element || typeof detail.text !== 'string') return;
+    this.pendingChipCaptures.push({ element: detail.element, text: detail.text });
+    if (this.pendingChipCaptures.length > 20) this.pendingChipCaptures.shift();
+  }
+
+  private isOwnedComposerValue(element: HTMLElement, draft: string): boolean {
+    return this.ownedComposerValues.get(element)?.has(draft) ?? false;
+  }
+
+  /** Pin the exact composer content produced by a successful insert, before any busy wait. */
+  private captureInsertedComposer(detail: ToolExecutionCompleteDetail): void {
+    if (!isAistudioHost() || !detail.invocationId) return;
+    const snapshot = getAistudioComposerSnapshot();
+    const element = snapshot?.element ?? getAistudioComposerElement();
+    if (!element) return;
+    const draft = snapshot ? this.normalizeDraft(snapshot.draft) : '';
+    const resultText = this.normalizeDraft(String(detail.result ?? ''));
+
+    const chipIndex = this.pendingChipCaptures.findIndex(
+      item => item.element === element && this.normalizeDraft(item.text) === resultText,
+    );
+    const chipCapture = chipIndex >= 0 ? this.pendingChipCaptures[chipIndex] : null;
+    if (chipIndex >= 0) this.pendingChipCaptures.splice(chipIndex, 1);
+
+    // A chip may extend an empty composer or one the extension already wrote. A pre-existing or
+    // edited user draft is not owned and must stay for a manual send.
+    const chipBaseOwned = draft === '' || this.isOwnedComposerValue(element, draft);
+    this.insertedSnapshots.set(detail.invocationId, {
+      draft,
+      element,
+      conversation: this.currentConversation(),
+      pendingChip: !!chipCapture && chipBaseOwned,
+      insertedText: chipCapture && chipBaseOwned ? resultText : undefined,
+    });
+  }
+
+  /**
+   * The AI Studio adapter physically merged a payload into the textarea (chip flush or raw insert).
+   * Adopt it only for a chip capture whose pre-flush composer was empty or extension-owned and whose
+   * payload contains this invocation's result. A pre-existing/edited user draft never matches and
+   * stays manual.
+   */
+  private handlePhysicalComposerWrite(event: Event): void {
+    if (!isAistudioHost()) return;
+    const detail = (event as CustomEvent).detail as
+      | { element?: HTMLElement; previousValue?: string; value?: string; insertedText?: string }
+      | undefined;
+    const element = detail?.element;
+    if (!element) return;
+    const previous = this.normalizeDraft(String(detail?.previousValue ?? ''));
+    const value = this.normalizeDraft(String(detail?.value ?? ''));
+    const physicalPayload = this.normalizeDraft(String(detail?.insertedText ?? ''));
+
+    const previousOwned = previous === '' || this.isOwnedComposerValue(element, previous);
+    let owned = this.ownedComposerValues.get(element);
+    if (!owned) {
+      owned = new Set();
+      this.ownedComposerValues.set(element, owned);
+    }
+    if (value && previousOwned) {
+      owned.add(value);
+      if (owned.size > 20) {
+        const oldest = owned.values().next().value;
+        if (oldest) owned.delete(oldest);
+      }
+    }
+
+    for (const captured of this.insertedSnapshots.values()) {
+      if (!captured.pendingChip || captured.element !== element) continue;
+      if (previous !== captured.draft) continue;
+      if (!captured.insertedText || !physicalPayload.includes(captured.insertedText)) continue;
+      captured.draft = value;
+      captured.pendingChip = false;
+      logger.debug('[AutomationService] Adopted extension chip flush into composer snapshot');
+    }
+  }
+
+  private currentConversation(): string {
+    return typeof location !== 'undefined' ? `${location.origin}${location.pathname}` : '';
+  }
+
+  /** The composer still contains exactly what the extension inserted, in the same conversation. */
+  private isComposerStillInserted(detail: ToolExecutionCompleteDetail): boolean {
+    if (!isAistudioHost() || !detail.invocationId) return true;
+    const captured = this.insertedSnapshots.get(detail.invocationId);
+    if (!captured) return true;
+    if (!captured.element.isConnected) return false;
+    if (this.currentConversation() !== captured.conversation) return false;
+    return this.normalizeDraft(this.composerValue(captured.element)) === captured.draft;
+  }
+
+  private composerValue(element: HTMLElement): string {
+    return element.tagName === 'TEXTAREA' || element.tagName === 'INPUT'
+      ? (element as HTMLTextAreaElement).value
+      : element.textContent ?? '';
+  }
+
+  private normalizeDraft(text: string): string {
+    return text.replace(/\r\n?/g, '\n').trim();
+  }
+
+  private cancelDeferredSubmit(reason: string): void {
+    const record = this.deferredSubmit;
+    if (!record) return;
+    record.cancelled = true;
+    record.observer.disconnect();
+    window.clearInterval(record.interval);
+    record.composer.removeEventListener('input', record.inputListener);
+    record.composer.removeEventListener('beforeinput', record.inputListener);
+    for (const id of record.invocationIds) this.insertedSnapshots.delete(id);
+    this.deferredSubmit = null;
+    // Transition-only diagnostic; the readiness observer/tick never logs per poll.
+    logger.debug('[AutomationService] Deferred AI Studio send cancelled', {
+      reason,
+      pendingInvocations: record.invocationIds.size,
+    });
+  }
+
+  private isDeferredScopeValid(record: DeferredSubmit): boolean {
+    if (!isAistudioHost() || record.cancelled) return false;
+    if (this.currentConversation() !== record.conversation) return false;
+    if (!record.composer.isConnected) return false;
+    if (this.normalizeDraft(this.composerValue(record.composer)) !== record.expectedDraft) return false;
+
+    for (const detail of record.details) {
+      if (!isAistudioDeliveryAuthorized(detail.provenance, detail.invocationId, detail.callId)) return false;
+      if (!this.isEffectContextValidSync(detail, 'submit')) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Persist one scoped deferred send for the active composer. The first busy attempt has already
+   * inserted the result; this record only waits for the same composer's real send control to become
+   * usable, then dispatches once. It never types, clicks a disabled control, or sends a changed draft.
+   */
+  private queueDeferredSubmit(
+    detail: ToolExecutionCompleteDetail,
+    batchDetails: ToolExecutionCompleteDetail[] = [],
+  ): void {
+    if (!isAistudioHost() || !detail.invocationId) return;
+    const captured = this.insertedSnapshots.get(detail.invocationId);
+    if (!captured || captured.pendingChip) return;
+    const conversation = this.currentConversation();
+    if (conversation !== captured.conversation) return;
+    if (!captured.element.isConnected) return;
+    if (this.normalizeDraft(this.composerValue(captured.element)) !== captured.draft) {
+      // The user edited the composer during the busy wait. Never pin/send that draft.
+      logger.debug('[AutomationService] Deferred send skipped: composer changed after insert');
+      return;
+    }
+    const expectedDraft = captured.draft;
+    if (!expectedDraft) return;
+    const container = (captured.element.closest(
+      '.prompt-box-container, ms-prompt-box, .prompt-input-wrapper, .input-area-container',
+    ) ?? captured.element.parentElement) as HTMLElement | null;
+    if (!container) return;
+
+    const detailsToAdd = new Set<ToolExecutionCompleteDetail>([detail]);
+    for (const item of batchDetails) {
+      if (!item.invocationId || item === detail) continue;
+      const itemSnapshot = this.insertedSnapshots.get(item.invocationId);
+      if (!itemSnapshot || itemSnapshot.element !== captured.element) continue;
+      if (!isAistudioDeliveryAuthorized(item.provenance, item.invocationId, item.callId)) continue;
+      detailsToAdd.add(item);
+    }
+    for (const item of detailsToAdd) {
+      if (!isAistudioDeliveryAuthorized(item.provenance, item.invocationId, item.callId)) return;
+      if (!this.isEffectContextValidSync(item, 'submit')) return;
+    }
+
+    if (this.deferredSubmit) {
+      const existing = this.deferredSubmit;
+      if (
+        !existing.cancelled &&
+        existing.composer === captured.element &&
+        existing.conversation === conversation
+      ) {
+        // Another late result landed in the same composer before the send control recovered.
+        // One send will carry all of them; keep a single readiness observer and one invocation set.
+        for (const item of detailsToAdd) {
+          existing.details.add(item);
+          if (item.invocationId) existing.invocationIds.add(item.invocationId);
+        }
+        existing.expectedDraft = expectedDraft;
+        logger.debug('[AutomationService] Added late result(s) to the deferred AI Studio send', {
+          pendingInvocations: existing.invocationIds.size,
+        });
+        void this.maybeAttemptDeferredSubmit();
+        return;
+      }
+      this.cancelDeferredSubmit('composer changed while waiting');
+    }
+
+    const inputListener = () => this.cancelDeferredSubmit('composer edited');
+    captured.element.addEventListener('input', inputListener);
+    captured.element.addEventListener('beforeinput', inputListener);
+
+    const observer = new MutationObserver(() => {
+      void this.maybeAttemptDeferredSubmit();
+    });
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      characterData: true,
+      attributeFilter: ['disabled', 'aria-disabled', 'class'],
+    });
+
+    const invocationIds = new Set<string>();
+    for (const item of detailsToAdd) if (item.invocationId) invocationIds.add(item.invocationId);
+    const record: DeferredSubmit = {
+      details: detailsToAdd,
+      invocationIds,
+      composer: captured.element,
+      container,
+      expectedDraft,
+      conversation,
+      observer,
+      interval: window.setInterval(() => {
+        void this.maybeAttemptDeferredSubmit();
+      }, 250),
+      inputListener,
+      attempting: false,
+      cancelled: false,
+    };
+    this.deferredSubmit = record;
+    logger.debug('[AutomationService] Deferred AI Studio send queued until the composer is ready', {
+      pendingInvocations: invocationIds.size,
+    });
+    void this.maybeAttemptDeferredSubmit();
+  }
+
+  private async maybeAttemptDeferredSubmit(): Promise<void> {
+    const record = this.deferredSubmit;
+    if (!record || record.cancelled || record.attempting) return;
+    if (!this.isDeferredScopeValid(record)) {
+      this.cancelDeferredSubmit('scope/settings/composer changed');
+      return;
+    }
+    if (!isAistudioSendControlReady()) return;
+
+    record.attempting = true;
+    try {
+      const adapterState = await storeRefs.getCurrentAdapterState?.();
+      if (!record || record.cancelled || this.deferredSubmit !== record) return;
+      if (!adapterState?.isReady || !adapterState.plugin || !adapterState.submitForm) return;
+      if (!this.isDeferredScopeValid(record)) {
+        this.cancelDeferredSubmit('scope changed before deferred retry');
+        return;
+      }
+
+      let busy = false;
+      let success = false;
+      try {
+        success = await adapterState.submitForm({
+          canProceed: () =>
+            this.deferredSubmit === record &&
+            this.isDeferredScopeValid(record) &&
+            Array.from(record.details).every(item => this.isEffectContextValidSync(item, 'submit')),
+          deferWhenBusy: true,
+          onBusy: () => {
+            busy = true;
+          },
+        });
+      } catch (error) {
+        logger.warn('[AutomationService] Deferred AI Studio submit failed:', error);
+        this.cancelDeferredSubmit('deferred submit error');
+        return;
+      }
+
+      if (success) {
+        const completedIds = Array.from(record.invocationIds);
+        const completedDetails = Array.from(record.details);
+        this.cancelDeferredSubmit('sent');
+        for (const id of completedIds) completeAistudioInvocation(id);
+        for (const item of completedDetails) this.markInvocationDelivered(item.invocationId);
+        logger.debug('[AutomationService] Deferred AI Studio send completed', {
+          sentInvocations: completedIds.length,
+        });
+      } else if (!busy) {
+        this.cancelDeferredSubmit('deferred send failed');
+      }
+      // busy: keep the same record; the observer/tick resumes when the control is usable.
+    } finally {
+      if (this.deferredSubmit === record) record.attempting = false;
+    }
+  }
+
+  /** A direct successful submit already sent the composer; retire any waiting record exactly once. */
+  private finishDeferredAsSentByDirect(detail: ToolExecutionCompleteDetail): void {
+    const record = this.deferredSubmit;
+    if (!record) return;
+    const captured = detail.invocationId ? this.insertedSnapshots.get(detail.invocationId) : undefined;
+    if (captured && captured.element !== record.composer) return;
+    const ids = Array.from(record.invocationIds);
+    const details = Array.from(record.details);
+    this.cancelDeferredSubmit('sent by direct submit');
+    for (const id of ids) completeAistudioInvocation(id);
+    for (const item of details) this.markInvocationDelivered(item.invocationId);
+  }
+
+  /**
    * Main handler for tool execution completion events
    */
   private async handleToolExecutionComplete(event: CustomEvent<ToolExecutionCompleteDetail>): Promise<void> {
@@ -294,6 +724,10 @@ export class AutomationService {
     // that has not started its delay yet; a later re-enable cannot resurrect this context.
     this.trackedContexts.add(detail);
     logger.debug('[AutomationService] Tool execution complete event received:', detail);
+
+    // One logical delivery per actual invocation. This runs before any await so two duplicate
+    // events cannot both pass the context check and insert twice.
+    if (!this.claimInvocationDelivery(detail.invocationId)) return;
 
     try {
       // Get current automation state from user preferences
@@ -325,7 +759,11 @@ export class AutomationService {
       
       if (shouldAutoInsert) {
         const insertSuccess = await this.handleAutoInsert(detail);
-        
+        if (insertSuccess) {
+          this.markInvocationDelivered(detail.invocationId);
+          this.captureInsertedComposer(detail);
+        }
+
         // Only proceed with auto submit if auto insert was successful
         // and auto submit is enabled. Coalesce so a multi-call batch submits once.
         if (insertSuccess && automationState.autoSubmit && (await this.isEffectContextValid(detail, 'submit'))) {
@@ -381,6 +819,7 @@ export class AutomationService {
       if (!effect || activeEffect === effect) affected.add(detail);
     }
     for (const detail of affected) this.markContextCancelled(detail);
+    if (this.deferredSubmit) this.cancelDeferredSubmit('automation cancelled');
   }
 
   /**
@@ -412,7 +851,7 @@ export class AutomationService {
     }
 
     if (!isAistudioHost()) return true;
-    if (!isAistudioProvenanceCurrent(detail.provenance)) {
+    if (!isAistudioDeliveryAuthorized(detail.provenance, detail.invocationId, detail.callId)) {
       this.markContextCancelled(detail);
       return false;
     }
@@ -457,7 +896,7 @@ export class AutomationService {
     }
 
     if (!isAistudioHost()) return true;
-    if (!isAistudioProvenanceCurrent(detail.provenance)) {
+    if (!isAistudioDeliveryAuthorized(detail.provenance, detail.invocationId, detail.callId)) {
       this.markContextCancelled(detail);
       return false;
     }
@@ -679,7 +1118,9 @@ export class AutomationService {
       // First result of a new batch — start the hard-cap clock.
       this.submitDeferStart = Date.now();
       this.submitBatchCardIds.clear();
+      this.submitBatchDetails.clear();
     }
+    this.submitBatchDetails.add(detail);
 
     // Anchor the batch to the exact card that produced this result. The callId is supplied by
     // the renderer event; source-level identity is used separately for stream monitoring.
@@ -694,12 +1135,14 @@ export class AutomationService {
         logger.debug('[AutomationService] Auto submit cancelled: setting was turned off');
         this.pendingSubmitTimer = null;
         this.submitBatchCardIds.clear();
+        this.submitBatchDetails.clear();
         return;
       }
       if (!(await this.isEffectContextValid(detail, 'submit'))) {
         logger.debug('[AutomationService] Auto submit cancelled: context is no longer current');
         this.pendingSubmitTimer = null;
         this.submitBatchCardIds.clear();
+        this.submitBatchDetails.clear();
         return;
       }
 
@@ -744,7 +1187,9 @@ export class AutomationService {
 
       this.pendingSubmitTimer = null;
       this.submitBatchCardIds.clear();
-      void this.handleAutoSubmit(detail);
+      const batchDetails = Array.from(this.submitBatchDetails);
+      this.submitBatchDetails.clear();
+      void this.handleAutoSubmit(detail, batchDetails);
     };
 
     this.pendingSubmitTimer = window.setTimeout(check, baseDelay);
@@ -785,6 +1230,12 @@ export class AutomationService {
    * by their own markers (pre-existing, abruptly ended, completed) rather than by idle time.
    */
   private isLoadingBlockCurrent(block: Element): boolean {
+    // A block that already completed (result body or success/error status) is not current work even
+    // if a stale loading class was left behind by a remount. Genuinely incomplete sources have no
+    // result body and still follow the positive-evidence checks below.
+    if (block.classList.contains('exec-success') || block.classList.contains('exec-error')) return false;
+    if (block.querySelector('.function-result-success, .function-result-error')) return false;
+
     const baseId = this.getBlockBaseId(block);
     if (!baseId) return true;
     if (this.submitBatchCardIds.has(block.getAttribute('data-block-id') ?? '')) return true;
@@ -851,7 +1302,10 @@ export class AutomationService {
    * Handle Auto Submit functionality
    * Submits the current form after auto insertion
    */
-  private async handleAutoSubmit(detail: ToolExecutionCompleteDetail): Promise<boolean> {
+  private async handleAutoSubmit(
+    detail: ToolExecutionCompleteDetail,
+    batchDetails: ToolExecutionCompleteDetail[] = [],
+  ): Promise<boolean> {
     this.activeEffects.set(detail, 'submit');
     try {
     const preferences = await storeRefs.getUserPreferences?.();
@@ -904,17 +1358,30 @@ export class AutomationService {
       }
 
       try {
+        let busy = false;
         const success = await submitForm({
-          canProceed: () => this.isEffectContextValidSync(detail, 'submit'),
+          canProceed: () =>
+            this.isEffectContextValidSync(detail, 'submit') && this.isComposerStillInserted(detail),
+          deferWhenBusy: isAistudioHost(),
+          onBusy: () => {
+            busy = true;
+          },
         });
-        
+
         if (success) {
           logger.debug('[AutomationService] Form submitted successfully via auto submit');
+          this.finishDeferredAsSentByDirect(detail);
+          if (detail.invocationId) this.insertedSnapshots.delete(detail.invocationId);
+          completeAistudioInvocation(detail.invocationId);
           return true;
-        } else {
-          logger.warn('[AutomationService] Form submission failed');
+        }
+        if (busy) {
+          this.queueDeferredSubmit(detail, batchDetails);
           return false;
         }
+        logger.warn('[AutomationService] Form submission failed');
+        this.cancelDeferredSubmit('direct submit failed');
+        return false;
       } catch (submitError) {
         logger.error('[AutomationService] Error calling submitForm method:', submitError);
         logger.error('[AutomationService] submitForm context info:', {

@@ -361,6 +361,16 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean> {
     if (inputChips.tryCapture(this, text, options)) {
+      // The result is now a chip; the textarea is untouched until submitForm flushes. Report the
+      // capture so automation can later adopt only this extension-owned physical payload.
+      const capturedInput = this.getChipAnchors?.()?.input;
+      if (capturedInput) {
+        document.dispatchEvent(
+          new CustomEvent('mcp:aistudio-chip-captured', {
+            detail: { element: capturedInput, text },
+          }),
+        );
+      }
       this.emitExecutionCompleted('insertText', { text }, { success: true, method: 'chip-capture' });
       return true;
     }
@@ -412,7 +422,13 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
    * Submit the current text in the AI Studio chat input
    * Enhanced with multiple selector fallbacks and better error handling
    */
-  async submitForm(options?: { formElement?: HTMLFormElement; canProceed?: () => boolean }): Promise<boolean> {
+  async submitForm(options?: {
+    formElement?: HTMLFormElement;
+    canProceed?: () => boolean;
+    /** Automation may defer instead of forcing Enter/form submission while the real control is busy. */
+    deferWhenBusy?: boolean;
+    onBusy?: () => void;
+  }): Promise<boolean> {
     const flushed = await inputChips.flushBeforeSubmit(this);
     if (!flushed) {
       // flushBeforeSubmit restores chips on failure; never send a partial draft.
@@ -431,6 +447,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     // valid through flush/readiness/fallback checks; only hand off to the next provenance cycle
     // immediately before the actual send dispatch.
     let beganNextCycle = false;
+    let busy = false;
     const beginForDispatch = (): void => {
       beginExtensionSubmission();
       beganNextCycle = true;
@@ -438,7 +455,16 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
 
     try {
       // Use the proven chatInputHandler method
-      const success = await submitChatInput(5000, options?.canProceed, beginForDispatch);
+      const success = await submitChatInput(
+        5000,
+        options?.canProceed,
+        beginForDispatch,
+        () => {
+          busy = true;
+          options?.onBusy?.();
+        },
+        options?.deferWhenBusy === true,
+      );
 
       if (success) {
         // Emit success event to the new event system
@@ -453,8 +479,10 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
         return true;
       } else {
         if (beganNextCycle) abortExtensionSubmission();
-        this.context.logger.error('Failed to submit using chatInputHandler');
-        this.emitExecutionFailed('submitForm', 'chatInputHandler failed to submit');
+        if (!busy) {
+          this.context.logger.error('Failed to submit using chatInputHandler');
+          this.emitExecutionFailed('submitForm', 'chatInputHandler failed to submit');
+        }
         return false;
       }
     } catch (error) {
@@ -1689,6 +1717,20 @@ export const insertTextToChatInput = (text: string): boolean => {
       const formattedText = currentText ? `${currentText}\n\n${text}` : text;
       chatInput.value = formattedText;
 
+      // The extension may have captured the result as a chip while the textarea was still empty.
+      // Report this physical write so automation can adopt only the payload it just inserted, and
+      // can distinguish a pre-existing user draft (previousValue non-empty) from its own write.
+      document.dispatchEvent(
+        new CustomEvent('mcp:aistudio-composer-write', {
+          detail: {
+            element: chatInput,
+            previousValue: currentText,
+            value: formattedText,
+            insertedText: text,
+          },
+        }),
+      );
+
       // Trigger input event to make AiStudio recognize the change
       const inputEvent = new Event('input', { bubbles: true });
       chatInput.dispatchEvent(inputEvent);
@@ -1845,6 +1887,8 @@ export const submitChatInput = (
   maxWaitTime = 5000,
   canProceed?: () => boolean,
   onBeforeDispatch?: () => void,
+  onBusy?: () => void,
+  deferWhenBusy = false,
 ): Promise<boolean> => {
   return new Promise(resolve => {
     try {
@@ -1884,6 +1928,7 @@ export const submitChatInput = (
         logger.debug(`Found submit button (${submitButton.getAttribute('aria-label') || 'unknown'})`);
 
         // Function to check if button is enabled and click it
+        let loggedDisabled = false;
         const tryClickingButton = (): 'clicked' | 'waiting' | 'failed' => {
           if (canProceed && !canProceed()) {
             logger.debug('Submission context changed while waiting for AI Studio send');
@@ -1917,7 +1962,10 @@ export const submitChatInput = (
             resolve(true);
             return 'clicked';
           } else {
-            logger.debug('Submit button is disabled, waiting...');
+            if (!loggedDisabled) {
+              loggedDisabled = true;
+              logger.debug('Submit button is disabled, waiting...');
+            }
             return 'waiting';
           }
         };
@@ -1948,6 +1996,14 @@ export const submitChatInput = (
 
             if (canProceed && !canProceed()) {
               logger.debug('Submission context changed before AI Studio fallback');
+              resolve(false);
+              return;
+            }
+            if (deferWhenBusy) {
+              // The real control stayed disabled. Do not click a disabled control or synthesize
+              // Enter; automation persists this send and resumes when the same composer is ready.
+              logger.debug('AI Studio send control is busy; deferring submit');
+              onBusy?.();
               resolve(false);
               return;
             }

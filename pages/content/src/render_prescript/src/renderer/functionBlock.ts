@@ -17,10 +17,12 @@ import {
 import { createLogger } from '@extension/shared/lib/logger';
 import { telemetry } from '../../../utils/telemetry';
 import {
+  claimAistudioAutomaticInvocation,
   getAistudioProvenance,
   isAistudioAutomaticActionEnabled,
   isAistudioHost,
   isAistudioProvenanceCurrent,
+  releaseAistudioAutomaticInvocation,
   type AistudioProvenance,
 } from '../provenance/aistudioTurnGate';
 
@@ -1154,6 +1156,7 @@ const AutoExecutionUtils = {
 
       if (attempts > MAX_AUTO_EXECUTE_ATTEMPTS) {
         logger.debug(`Auto-execute: Giving up on block ${blockId} after ${attempts - 1} attempts`);
+        releaseAistudioAutomaticInvocation(functionDetails.invocationId);
         executionTracker.cleanupBlock(blockId);
         return;
       }
@@ -1184,6 +1187,7 @@ const AutoExecutionUtils = {
               setupAutoExecution();
             } else {
               logger.debug(`Auto-execute: Giving up on block ${blockId} - not found in DOM`);
+              releaseAistudioAutomaticInvocation(functionDetails.invocationId);
               executionTracker.cleanupBlock(blockId);
             }
             return;
@@ -1221,7 +1225,11 @@ const AutoExecutionUtils = {
                     return;
                   }
                   telemetry('auto_execute');
-                  blockToSettle.querySelector<HTMLButtonElement>('.execute-button')?.click();
+                  const queuedButton = blockToSettle.querySelector<HTMLButtonElement>('.execute-button');
+                  if (functionDetails.invocationId && queuedButton) {
+                    queuedButton.setAttribute('data-mcp-invocation-id', functionDetails.invocationId);
+                  }
+                  queuedButton?.click();
                   await waitForSettled(blockToSettle);
                 } catch (e) {
                   logger.error('Auto-execute chain error:', e);
@@ -1237,6 +1245,7 @@ const AutoExecutionUtils = {
               setupAutoExecution();
             } else {
               logger.debug(`Auto-execute: Giving up on block ${blockId} - button not found`);
+              releaseAistudioAutomaticInvocation(functionDetails.invocationId);
               executionTracker.cleanupBlock(blockId);
             }
           }
@@ -1514,6 +1523,16 @@ const renderCard = (
           return;
         }
 
+        // One automatic dispatch per logical call (turn identity + call id), even if this card is
+        // remounted with a new DOM id or re-rendered with a changed observation token.
+        const invocationId = isAistudioHost()
+          ? claimAistudioAutomaticInvocation(provenance, callId)
+          : null;
+        if (isAistudioHost() && !invocationId) {
+          logger.debug(`Auto-execution already claimed for AI Studio call ${callId}; skipping duplicate card`);
+          return;
+        }
+
         executionTracker.markFunctionExecuted(callId, contentSignature, functionName);
         executionTracker.markBlockExecuted(cardId);
 
@@ -1523,6 +1542,7 @@ const renderCard = (
           contentSignature,
           params: completeParameters || {},
           provenance,
+          invocationId,
         };
 
         AutoExecutionUtils.setupOptimizedAutoExecution(cardId, functionDetails);
@@ -1924,6 +1944,14 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
           return true;
         }
 
+        const invocationId = isAistudioHost()
+          ? claimAistudioAutomaticInvocation(provenance, callId)
+          : null;
+        if (isAistudioHost() && !invocationId) {
+          logger.debug(`Auto-execution already claimed for AI Studio call ${callId}; skipping duplicate card`);
+          return true;
+        }
+
         executionTracker.markFunctionExecuted(callId, contentSignature, functionName);
         executionTracker.markBlockExecuted(blockId);
 
@@ -1935,6 +1963,7 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
           contentSignature,
           params: completeParameters || {},
           provenance,
+          invocationId,
         };
 
         AutoExecutionUtils.setupOptimizedAutoExecution(blockId, functionDetails);

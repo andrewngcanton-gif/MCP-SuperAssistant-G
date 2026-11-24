@@ -5,10 +5,14 @@ import { checkAndDisplayFunctionHistory, createHistoryPanel, updateHistoryPanel 
 import { extractJSONParameters, stripLanguageTags, extractCleanContent } from '../parser/jsonFunctionParser';
 import { createLogger } from '@extension/shared/lib/logger';
 import {
+  claimAistudioAutomaticInvocation,
+  createAistudioInvocationId,
   getAistudioProvenance,
   isAistudioAutomaticActionEnabled,
   isAistudioHost,
   isAistudioProvenanceCurrent,
+  registerAistudioInvocation,
+  type AistudioProvenance,
 } from '../provenance/aistudioTurnGate';
 
 // Add type declarations for the global adapter and mcpClient access
@@ -418,6 +422,27 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
       }
     }
 
+    // One stable invocation id per actual tool call. Automatic dispatch uses the reservation the
+    // scheduler already made for this logical call; a deliberate manual click always gets a new id
+    // so "Run again" remains a genuinely new invocation.
+    let invocationId: string | null = null;
+    if (isAistudioHost()) {
+      if (isAutomaticClick) {
+        invocationId = executeButton.getAttribute('data-mcp-invocation-id');
+        if (!invocationId) invocationId = claimAistudioAutomaticInvocation(provenance, callId);
+        if (!invocationId) {
+          logger.debug(`Blocked duplicate automatic dispatch for AI Studio call ${callId}`);
+          return;
+        }
+      } else {
+        invocationId = createAistudioInvocationId('manual');
+      }
+      if (provenance && !registerAistudioInvocation(provenance, callId, invocationId) && isAutomaticClick) {
+        logger.debug(`Blocked duplicate automatic invocation registration for AI Studio call ${callId}`);
+        return;
+      }
+    }
+
     // Batch button state changes
     executeButton.disabled = true;
     buttonText.style.display = 'none';
@@ -492,7 +517,10 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
 
         resetButtonState();
         setStatus('success');
-        displayResult(resultsPanel, loadingIndicator, true, result, performance.now() - t0);
+        displayResult(resultsPanel, loadingIndicator, true, result, performance.now() - t0, {
+          provenance,
+          invocationId,
+        });
 
         // Store execution and update history efficiently
         const executionData = storeExecutedFunction(functionName, callId, parameters, contentSignature);
@@ -518,7 +546,10 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
         }
 
         setStatus('error');
-        displayResult(resultsPanel, loadingIndicator, false, errorMessage, performance.now() - t0);
+        displayResult(resultsPanel, loadingIndicator, false, errorMessage, performance.now() - t0, {
+          provenance,
+          invocationId,
+        });
 
         // Return the failure to the model too, as its own tool-result chip, so a
         // partially-failing multi-call batch still reports every call's outcome.
@@ -532,6 +563,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
                 functionName,
                 skipAutoInsertCheck: false,
                 provenance,
+                invocationId,
               },
             }),
           );
@@ -1036,13 +1068,17 @@ export const displayResult = (
   success: boolean,
   result: any,
   durationMs?: number,
+  delivery?: { provenance?: AistudioProvenance | null; invocationId?: string | null },
 ): void => {
   // Cache attributes for performance
   const callId = resultsPanel.getAttribute('data-call-id') || '';
   const functionName = resultsPanel.getAttribute('data-function-name') || '';
-  // Result provenance is derived at display time from the card's own turn, so a manual run on a
-  // historical card cannot auto-insert or auto-submit into the current composer.
-  const provenance = getAistudioProvenance(resultsPanel.closest('.function-block'));
+  // The invocation captured provenance and id when the tool call actually started. Falling back to
+  // the card's current turn keeps manual/ordinary display working; the captured values are what
+  // let a late result from the same batch survive the extension's own result send.
+  const provenance =
+    delivery?.provenance !== undefined ? delivery.provenance : getAistudioProvenance(resultsPanel.closest('.function-block'));
+  const invocationId = delivery?.invocationId ?? null;
 
   // Efficient cleanup of previous results
   const cleanupPreviousResults = () => {
@@ -1549,6 +1585,7 @@ export const displayResult = (
               functionName,
               skipAutoInsertCheck: false,
               provenance,
+              invocationId,
             },
           }),
         );

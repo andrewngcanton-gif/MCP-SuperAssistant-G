@@ -105,6 +105,60 @@ let cycle: SubmissionCycle | null = null;
 let nextEpoch = 1;
 let urlPollTimer: number | null = null;
 
+/**
+ * One actual tool invocation started from a card (automatic or deliberate manual Run).
+ *
+ * The DOM card id is not an identity: AI Studio remounts/virtualizes cards and may re-render the
+ * same logical call with a changed observation token. A logical invocation is therefore keyed by
+ * the page turn identity that owns the card plus the model's call id. The invocation id is carried
+ * on every completion for that invocation so a redisplayed/duplicated completion cannot be
+ * inserted or submitted twice.
+ */
+interface InvocationRecord {
+  invocationId: string;
+  logicalKey: string;
+  provenance: AistudioProvenance;
+  conversationAliases: Set<string>;
+  createdAt: number;
+  delivered: boolean;
+  cancelled: boolean;
+}
+
+/** Automatic dispatch reservations: one automatic click per logical call in this turn. */
+interface AutoClaim {
+  invocationId: string;
+  logicalKey: string;
+  createdAt: number;
+}
+
+const invocationRecords = new Map<string, InvocationRecord>();
+const autoClaims = new Map<string, AutoClaim>();
+const loggedAutoClaimSkips = new Set<string>();
+let nextInvocation = 1;
+
+// Long enough for a pending observation continuation to return; bounded so a forgotten card does
+// not keep authority for the rest of the page lifetime.
+const INVOCATION_TTL_MS = 30 * 60 * 1000;
+
+const logicalInvocationKey = (provenance: AistudioProvenance, callId: string | null | undefined): string =>
+  `${provenance.session}|${provenance.userTurnId}|${provenance.turnId}|${callId ?? ''}`;
+
+const pruneInvocationRecords = (): void => {
+  const cutoff = Date.now() - INVOCATION_TTL_MS;
+  for (const [id, record] of invocationRecords) {
+    if (record.createdAt < cutoff) invocationRecords.delete(id);
+  }
+  for (const [key, claim] of autoClaims) {
+    if (claim.createdAt < cutoff) autoClaims.delete(key);
+  }
+};
+
+const clearInvocationRecords = (): void => {
+  invocationRecords.clear();
+  autoClaims.clear();
+  loggedAutoClaimSkips.clear();
+};
+
 const currentConversation = (): string =>
   isBrowser() ? `${location.origin}${location.pathname}` : '';
 
@@ -112,6 +166,15 @@ const allTurns = (): HTMLElement[] =>
   Array.from(document.querySelectorAll<HTMLElement>(TURN_SELECTOR));
 
 /** Draft text actually present in the AI Studio composer at submission time, plus its editor. */
+const findComposerEditor = (): HTMLElement | null => {
+  for (const editor of Array.from(document.querySelectorAll<HTMLElement>('textarea, [contenteditable="true"]'))) {
+    if (editor.closest('#mcp-button-wrapper, #mcp-popover-container')) continue;
+    if (!editor.closest(COMPOSER_SELECTOR)) continue;
+    return editor;
+  }
+  return null;
+};
+
 const readSubmittedComposer = (): { draft: string; element: HTMLElement } | null => {
   for (const editor of Array.from(document.querySelectorAll<HTMLElement>('textarea, [contenteditable="true"]'))) {
     if (editor.closest('#mcp-button-wrapper, #mcp-popover-container')) continue;
@@ -256,10 +319,15 @@ const migrateOrCancelOnNavigation = (): void => {
     activeCycle.conversation = current;
     activeCycle.conversationAliases.add(current);
     activeCycle.firstSendMigrated = true;
+    for (const record of invocationRecords.values()) {
+      record.conversationAliases.add(activeCycle.conversation);
+      record.conversationAliases.add(current);
+    }
     logger.debug(`AI Studio submission cycle moved with first-send URL transition to ${current}`);
   } else {
     logger.debug('AI Studio navigation invalidated the submission cycle');
     cycle = null;
+    clearInvocationRecords();
   }
 };
 
@@ -355,6 +423,15 @@ const beginSubmissionCycle = (
   migrateOrCancelOnNavigation();
   trackSeenTurns();
 
+  // A trusted user send/regenerate starts new work and explicitly cancels old work. An extension
+  // send is the delivery of an already-authorized in-flight result: keep those operations valid so
+  // later results from the same batch may still arrive, and keep automatic-dispatch reservations
+  // so a remount of the old turn cannot re-dispatch while the send is in progress.
+  if (origin !== 'extension') {
+    clearInvocationRecords();
+  }
+  pruneInvocationRecords();
+
   const now = Date.now();
   // A trusted Enter and the app's own send click can describe the same send. Keep the first
   // snapshot instead of replacing the baseline after the user turn was already inserted.
@@ -442,6 +519,21 @@ const isSendControl = (target: Element | null): boolean => {
   return true;
 };
 
+/** Current non-empty composer draft and its editor, for a deferred send to pin its scope. */
+export const getAistudioComposerSnapshot = (): { draft: string; element: HTMLElement } | null =>
+  readSubmittedComposer();
+
+/** Active composer editor even when the draft is empty (a chip-captured result has not flushed yet). */
+export const getAistudioComposerElement = (): HTMLElement | null => findComposerEditor();
+
+/** True when the real AI Studio send control is present, scoped to the composer, and enabled. */
+export const isAistudioSendControlReady = (): boolean => {
+  if (!isAistudioHost()) return false;
+  return Array.from(document.querySelectorAll<HTMLElement>(SEND_CONTROL_SELECTOR)).some(control =>
+    isSendControl(control),
+  );
+};
+
 const onKeyDown = (event: KeyboardEvent): void => {
   if (!event.isTrusted) return;
   // AI Studio sends on plain Enter; Shift+Enter is a newline, other modifiers are not send
@@ -470,8 +562,17 @@ const onClick = (event: MouseEvent): void => {
 };
 
 const onNavigation = (): void => {
-  if (!cycle) return;
-  migrateOrCancelOnNavigation();
+  if (cycle) {
+    migrateOrCancelOnNavigation();
+    return;
+  }
+  if (invocationRecords.size === 0 && autoClaims.size === 0) return;
+  const current = currentConversation();
+  const stillHere = Array.from(invocationRecords.values()).some(record => record.conversationAliases.has(current));
+  if (!stillHere) {
+    clearInvocationRecords();
+    logger.debug('AI Studio navigation cancelled in-flight delivery authority');
+  }
 };
 
 let navigationListenersAttached = false;
@@ -498,7 +599,10 @@ export const initializeAistudioTurnGate = (): void => {
 export const beginExtensionSubmission = (): void => beginSubmissionCycle('extension');
 
 /** Outstanding cards and results from this cycle stay cancelled after tools are re-enabled. */
-export const cancelAistudioSubmission = (): void => { cycle = null; };
+export const cancelAistudioSubmission = (): void => {
+  cycle = null;
+  clearInvocationRecords();
+};
 
 /** Called by the adapter when its submission attempt failed, so no cycle is left armed. */
 export const abortExtensionSubmission = (): void => {
@@ -551,6 +655,131 @@ export const isAistudioProvenanceCurrent = (provenance: AistudioProvenance | nul
   return stableTurnId(userTurn) === provenance.userTurnId;
 };
 
+/** New unique id for a deliberate manual invocation (Run again, history re-run). */
+export const createAistudioInvocationId = (kind: 'manual'): string =>
+  `aistudio-${kind}-${sessionId}-${nextInvocation++}`;
+
+/**
+ * Reserve the automatic dispatch for one logical call (page turn + call id). Returns the stable
+ * invocation id on the first claim, or null when another render/observer path already claimed it.
+ * The claim survives a remount/re-render with changed parameters, so one logical automatic call
+ * cannot produce two server jobs merely because a DOM card was replaced.
+ */
+export const claimAistudioAutomaticInvocation = (
+  provenance: AistudioProvenance | null | undefined,
+  callId: string | null | undefined,
+): string | null => {
+  if (!isAistudioHost()) return null;
+  if (!provenance || !callId) return null;
+  if (!isAistudioProvenanceCurrent(provenance)) return null;
+
+  pruneInvocationRecords();
+  const key = logicalInvocationKey(provenance, callId);
+  if (autoClaims.has(key)) {
+    if (!loggedAutoClaimSkips.has(key)) {
+      loggedAutoClaimSkips.add(key);
+      logger.debug(`AI Studio automatic invocation already claimed for ${callId}; ignoring duplicate render`);
+    }
+    return null;
+  }
+
+  const invocationId = `aistudio-auto-${sessionId}-${nextInvocation++}`;
+  autoClaims.set(key, { invocationId, logicalKey: key, createdAt: Date.now() });
+  return invocationId;
+};
+
+/** Drop a reservation only when the automatic path definitively gave up without dispatching. */
+export const releaseAistudioAutomaticInvocation = (invocationId: string | null | undefined): void => {
+  if (!invocationId) return;
+  for (const [key, claim] of autoClaims) {
+    if (claim.invocationId === invocationId) {
+      autoClaims.delete(key);
+      loggedAutoClaimSkips.delete(key);
+      return;
+    }
+  }
+};
+
+/**
+ * Register a real invocation before its tool call starts. Only a card that is currently
+ * authorized can register; historical/remounted/unrelated cards never gain authority.
+ */
+export const registerAistudioInvocation = (
+  provenance: AistudioProvenance | null | undefined,
+  callId: string | null | undefined,
+  invocationId: string | null | undefined,
+): boolean => {
+  if (!isAistudioHost()) return true;
+  if (!provenance || !callId || !invocationId) return false;
+  if (!isAistudioProvenanceCurrent(provenance)) return false;
+  if (invocationRecords.has(invocationId)) return false;
+
+  pruneInvocationRecords();
+  invocationRecords.set(invocationId, {
+    invocationId,
+    logicalKey: logicalInvocationKey(provenance, callId),
+    provenance: { ...provenance },
+    conversationAliases: new Set([provenance.conversation, currentConversation()]),
+    createdAt: Date.now(),
+    delivered: false,
+    cancelled: false,
+  });
+  return true;
+};
+
+const isInvocationRecordAuthorized = (invocationId: string, provenance?: AistudioProvenance | null): boolean => {
+  const record = invocationRecords.get(invocationId);
+  if (!record) return false;
+  if (record.delivered || record.cancelled) return false;
+  if (Date.now() - record.createdAt > INVOCATION_TTL_MS) {
+    invocationRecords.delete(invocationId);
+    return false;
+  }
+  if (!record.conversationAliases.has(currentConversation())) return false;
+  if (provenance) {
+    if (provenance.session !== record.provenance.session) return false;
+    if (provenance.userTurnId !== record.provenance.userTurnId) return false;
+    if (provenance.turnId !== record.provenance.turnId) return false;
+  }
+  return true;
+};
+
+/**
+ * Delivery authorization for a completion. The current provenance remains the fast path. A
+ * completion from an invocation started while the previous epoch was current stays authorized
+ * across an extension-initiated send in the same conversation, so a late result from the same
+ * batch is not discarded. A new user send/navigation/reset/Disable All/setting switch clears it.
+ */
+export const isAistudioDeliveryAuthorized = (
+  provenance: AistudioProvenance | null | undefined,
+  invocationId?: string | null,
+  callId?: string | null,
+): boolean => {
+  if (!isAistudioHost()) return true;
+  if (isAistudioProvenanceCurrent(provenance)) return true;
+  if (!provenance || !invocationId) return false;
+  if (!isInvocationRecordAuthorized(invocationId, provenance)) return false;
+
+  const record = invocationRecords.get(invocationId)!;
+  if (callId && record.logicalKey !== logicalInvocationKey(record.provenance, callId)) return false;
+  return true;
+};
+
+/** Mark one logical delivery complete so later duplicate completions cannot insert/submit again. */
+export const completeAistudioInvocation = (invocationId: string | null | undefined): void => {
+  if (!invocationId) return;
+  const record = invocationRecords.get(invocationId);
+  if (record) record.delivered = true;
+};
+
+/** Cancel all in-flight delivery authority without touching a card the user may still run manually. */
+export const cancelAistudioInFlightWork = (): void => {
+  for (const record of invocationRecords.values()) record.cancelled = true;
+  invocationRecords.clear();
+  autoClaims.clear();
+  loggedAutoClaimSkips.clear();
+};
+
 /**
  * Current automatic-action eligibility. `window.__mcpToolEnablement` is published synchronously
  * by the tool store subscription, so Disable All also stops actions already queued.
@@ -594,6 +823,13 @@ export const __getAistudioGateStateForTests = () => ({
     : null,
   historicalTurnIds: Array.from(historicalTurnIds),
   seenTurnIds: Array.from(seenTurnIds),
+  invocationRecords: Array.from(invocationRecords.values()).map(record => ({
+    invocationId: record.invocationId,
+    logicalKey: record.logicalKey,
+    delivered: record.delivered,
+    cancelled: record.cancelled,
+  })),
+  autoClaims: Array.from(autoClaims.values()).map(claim => claim.logicalKey),
 });
 
 /** Test-only reset; also used when a page test swaps the AI Studio document. */
@@ -612,6 +848,8 @@ export const __resetAistudioTurnGateForTests = (): void => {
   initialized = false;
   cycle = null;
   nextEpoch = 1;
+  nextInvocation = 1;
+  clearInvocationRecords();
   historicalTurnIds.clear();
   historicalUserTurnIds.clear();
   seenTurnIds.clear();
