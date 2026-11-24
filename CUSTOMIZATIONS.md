@@ -17,3 +17,7 @@ The local integration references WebCodex 0.5.0 and RTK 0.49.0. Local Runner con
 ## License
 
 The upstream project is distributed under the MIT License. The original LICENSE file and copyright notice are retained.
+
+## Repository branches
+
+The default branch is custom. It omits the upstream Dependabot schedule to keep the repository focused on main and custom. The main branch retains the original upstream configuration. The baseline-v0.7.3-local tag identifies the integrated source before repository housekeeping.
