@@ -148,6 +148,7 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp
 
 - **Gemini may forget the tool descriptions in long conversations.** If it stops following the tool instructions, use **Insert** or **Attach** in the **MCP** menu next to the composer, then send the current MCP Instructions again.
 - **Auto Submit occasionally fails.** The intermittent cause has yet to be diagnosed. If the result is already in the composer, wait until the page is ready and send it manually once.
+- **Tested environment.** This extension has only been tested in Chrome on Windows 11.
 
 ## License
 

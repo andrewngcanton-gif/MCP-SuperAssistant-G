@@ -148,6 +148,7 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp
 
 - **Gemini 长对话中可能忘记工具说明。** 如果模型不再按工具说明调用，在输入框旁的 **MCP** 菜单点 **Insert** 或 **Attach**，把最新的 MCP Instructions 再发一次。
 - **偶尔无法 Auto Submit。** 间歇性原因尚待排查。如果工具结果已经在输入框里，等网页恢复可发送后，可以手动发送一次。
+- **测试环境。** 本扩展目前仅在 Windows 11 上的 Chrome 中进行了测试。
 
 ## 许可证
 
