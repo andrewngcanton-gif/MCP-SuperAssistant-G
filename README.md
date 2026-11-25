@@ -22,7 +22,7 @@
 ## 新功能与改进
 
 - **WebCodex RTK 开关。** 先在运行 WebCodex Runner 的机器上安装 RTK 命令行工具，并确保 Runner 能在 `PATH` 中找到 `rtk`。直接使用原版 WebCodex 即可。侧栏 **Instructions → Use RTK with WebCodex** 默认关闭。启用 WebCodex 的 `run_process` 并打开开关后，将重新生成的 MCP Instructions 发到对话。指令会提示模型使用 RTK 压缩适用命令的长输出。若还希望 `work_on_project` 返回同一规则，可以另外配置 Runner 的 `[instructions].files`。 [RTK 安装说明](https://github.com/rtk-ai/rtk)
-- **WebCodex 文件编辑规则。** 指令说明 `edit_project_files` 必须提供 `project` 和 `changes`，每项包含 `kind` 和 `path`。内容复杂或首次报错时，提示模型改用同一 WebCodex 服务上可用的 `run_shell`。
+- **WebCodex 文件编辑规则。** 指令说明 `edit_project_files` 必须提供 `project` 和 `changes`，每项包含 `kind` 和 `path`。内容复杂或首次报错时，提示模型改用同一 WebCodex 服务上可用的 `run_shell`，以减少重复尝试和 token 消耗。
 - **更短的 MCP Instructions。** 精简 Compact 和 JSON 两种模板的自然语言，保留必填参数、schema 查询方式、调用示例以及 WebCodex 和 RTK 规则。去掉收到 schema 错误提示就重试的通用指令。
 - **CrewDispatch 代理配置开关。** CrewDispatch 插件的公开发布版已过时，后续不再更新。大多数用户可以忽略此选项，保持默认关闭。已有可运行的 CrewDispatch MCP 服务时，可以用配置生成器注册。修改开关后，重新生成代理配置并重启代理即可生效。 [CrewDispatch 配置指南](CUSTOMIZATIONS.md#crewdispatch-opt-in-proxy-configuration)
 - **新图标和侧栏横幅。** 更新扩展和网页内的 MCP 图标，使用新版侧栏横幅，并移除横幅原有的站外跳转。
@@ -79,7 +79,7 @@ pnpm build
 扩展连接 MCP SuperAssistant Proxy 的 SSE 地址，代理再通过 Streamable HTTP 连接 WebCodex 的 `/mcp`。以下配置以本地 WebCodex **0.5.0** 为例。
 
 1. 启动 WebCodex 服务和 Runner，确认 Runner 已连接，并在 WebCodex 中配置要访问的项目。
-2. 将下面的 `webcodex` 条目合并到代理 `mcp-config.json` 的 `mcpServers` 中。把端点和请求头的值换成 WebCodex 提供的配置。`60143` 是示例端口，Bearer token 只保存在本地配置文件里。
+2. 将下面的 `webcodex` 条目合并到代理 `mcp-config.json` 的 `mcpServers` 中。WebCodex 0.5.0 的这个连接方式使用 `X-WebCodex-MCP-Surface: cli`。`Authorization` 使用同一 WebCodex 服务的用户 token，Windows 可按下方脚本从桌面版的已登录连接读取。按实际情况调整示例端口 `60143`。
 
    ```json
    {
@@ -88,7 +88,7 @@ pnpm build
          "type": "streamable-http",
          "url": "http://127.0.0.1:60143/mcp",
          "headers": {
-           "X-WebCodex-MCP-Surface": "<WebCodex 提供的值>",
+           "X-WebCodex-MCP-Surface": "cli",
            "Authorization": "Bearer <你的 WebCodex token>"
          }
        }
@@ -99,10 +99,51 @@ pnpm build
 3. 用上面的命令启动或重启代理，在扩展侧栏选择 **SSE** 并连接 `http://localhost:3006/sse`。到 **Tools** 确认 WebCodex 工具已出现并启用。
 4. 在聊天里插入并发送更新后的 **MCP Instructions**，再请模型用 `list_projects` 列出项目，或用 `work_on_project` 打开一个已知项目，验证连接。
 
+##### 获取用户 token 并生成本地配置（Windows）
+
+对已经登录的 WebCodex Desktop 0.5.0，下面的 **PowerShell 7** 脚本会先列出 `webcodex-user-token` 文件的路径。若有多个，选择与目标服务器和账号对应的文件。若找不到文件，先在 WebCodex Desktop 登录该连接，或使用该服务器为你签发的用户 API token。脚本只显示文件路径，把 Bearer token 写入仓库外的本地配置文件。已有代理配置时，可以把 `$configPath` 改成它的路径，脚本会保留其他 `mcpServers` 条目。
+
+```powershell
+$profileRoot = Join-Path $env:LOCALAPPDATA 'dev.webcodex.desktop/local-connections'
+Get-ChildItem -LiteralPath $profileRoot -Recurse -File -Filter 'webcodex-user-token' |
+    Select-Object -ExpandProperty FullName
+
+$tokenPath = (Read-Host 'Full path of the token file for this WebCodex login').Trim('"')
+$token = (Get-Content -LiteralPath $tokenPath -Raw -ErrorAction Stop).Trim()
+if (-not $token) { throw 'The WebCodex token file is empty.' }
+$configPath = Join-Path $env:LOCALAPPDATA 'mcp-superassistant-webcodex.json'
+$config = if (Test-Path -LiteralPath $configPath) {
+    Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+} else {
+    @{ mcpServers = @{} }
+}
+if (-not $config.Contains('mcpServers')) { $config['mcpServers'] = @{} }
+$config.mcpServers['webcodex'] = @{
+    type = 'streamable-http'
+    url = 'http://127.0.0.1:60143/mcp'
+    headers = @{
+        'X-WebCodex-MCP-Surface' = 'cli'
+        'Authorization' = "Bearer $token"
+    }
+}
+$config | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $configPath -Encoding utf8 -ErrorAction Stop
+```
+
+使用脚本的默认配置路径时，用以下命令启动代理。
+
+```powershell
+npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp-superassistant-webcodex.json" --outputTransport sse --port 3006
+```
+
 ### 5. 试跑并更新
 
 - 在聊天输入框旁打开 **MCP** 菜单，点 **Insert** 加入 MCP Instructions。输入一条只读测试请求，连同指令一起发送。模型生成工具卡片后，可以先手动点 **Run** 验证，再按需开启自动执行、插入和发送。
 - 更新时，在项目目录执行 `git pull --ff-only`、`pnpm install --frozen-lockfile` 和 `pnpm build`。回到 `chrome://extensions/` 点本扩展的 **重新加载**，再刷新已打开的聊天页。遇到 `Extension context is invalid` 时，也应刷新聊天页重新注入扩展脚本。
+
+## 已知问题
+
+- **Gemini 长对话中可能忘记工具说明。** 如果模型不再按工具说明调用，在输入框旁的 **MCP** 菜单点 **Insert** 或 **Attach**，把最新的 MCP Instructions 再发一次。
+- **偶尔无法 Auto Submit。** 间歇性原因尚待排查。如果工具结果已经在输入框里，等网页恢复可发送后，可以手动发送一次。
 
 ## 许可证
 
