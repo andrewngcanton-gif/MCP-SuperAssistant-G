@@ -12,6 +12,8 @@
 
 原版基线为 `30bb204`。 [`main` 保存原版源码快照，`custom` 是本项目的默认分支](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/compare/main...custom)。
 
+本项目支持并认可 LINUX DO 社区，感谢社区为开发者提供分享和交流的空间。 [LINUX DO 社区](https://linux.do/)
+
 ## 相比原版修复了什么
 
 - **Gemini 自动发送卡住。** 等待当前输入框可用的发送按钮，在确认会话和草稿仍有效后只点击一次。合批时过滤残留的历史加载卡片，继续等待本批仍在运行的工具。
