@@ -4,7 +4,9 @@
   <img src="chrome-extension/public/superassistant-banner.svg" alt="MCP SuperAssistant G banner" width="640">
 </p>
 
-[简体中文](README.md)
+<p align="center">
+  <a href="README.md">中文</a> &bull; <strong>English</strong>
+</p>
 
 **MCP SuperAssistant G** is a community build based on [MCP SuperAssistant v0.7.3](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3). It brings MCP tools to web chat apps such as Gemini and Google AI Studio through a browser extension. This repository provides the source. Build it and load it using Chrome Developer mode.
 
