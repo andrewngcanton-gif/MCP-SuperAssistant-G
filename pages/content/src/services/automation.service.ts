@@ -1308,14 +1308,6 @@ export class AutomationService {
   ): Promise<boolean> {
     this.activeEffects.set(detail, 'submit');
     try {
-    const preferences = await storeRefs.getUserPreferences?.();
-    const delay = preferences?.autoSubmitDelay || 0;
-
-    if (delay > 0) {
-      logger.debug(`Auto Submit: Waiting ${delay} seconds before submission`);
-      await new Promise(resolve => setTimeout(resolve, delay * 1000));
-    }
-
     if (!(await this.isEffectContextValid(detail, 'submit'))) {
       logger.debug('[AutomationService] Auto submit cancelled: context is no longer current');
       return false;
@@ -1326,7 +1318,9 @@ export class AutomationService {
       return false;
     }
 
-    logger.debug('[AutomationService] Handling auto submit', { appliedDelay: delay });
+    // The coalesced scheduler already waited 1000ms + autoSubmitDelay before calling this stage.
+    const settleDelayMs = 800;
+    logger.debug('[AutomationService] Handling auto submit', { settleDelayMs });
 
     try {
       // Get current adapter from the adapter hook
@@ -1345,7 +1339,7 @@ export class AutomationService {
       logger.debug('[AutomationService] Using adapter for auto submit:', activePlugin.name);
 
       // Add a small delay to ensure any prior insertion/attachment has settled in the UI
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, settleDelayMs));
 
       if (!(await this.isEffectContextValid(detail, 'submit'))) {
         logger.debug('[AutomationService] Auto submit cancelled after settle delay');

@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <!-- 背景渐变 -->
+    <linearGradient id="lightBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F0F4F9" />
+    </linearGradient>
+
+    <!-- 中层 Gemini 流光渐变 -->
+    <linearGradient id="geminiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1A73E8" />
+      <stop offset="45%" stop-color="#7C5295" />
+      <stop offset="80%" stop-color="#D94B82" />
+      <stop offset="100%" stop-color="#E8710A" />
+    </linearGradient>
+
+    <!-- 内层活力青绿/青空翠蓝渐变 (Teal & Cyan) -->
+    <linearGradient id="tealGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00C49F" />
+      <stop offset="50%" stop-color="#00D2D3" />
+      <stop offset="100%" stop-color="#00A8FF" />
+    </linearGradient>
+
+    <!-- 容器阴影 -->
+    <filter id="softShadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#1E293B" flood-opacity="0.08" />
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#1E293B" flood-opacity="0.04" />
+    </filter>
+
+    <!-- 核心 CSS 动画定义 -->
+    <style>
+      @keyframes geminiStarShine {
+        0% {
+          transform: scale(0.85) rotate(0deg);
+          opacity: 0.85;
+          filter: drop-shadow(0 0 1px rgba(26, 115, 232, 0.4));
+        }
+        50% {
+          transform: scale(1.18) rotate(45deg);
+          opacity: 1;
+          filter: drop-shadow(0 0 8px rgba(217, 75, 130, 0.75)) drop-shadow(0 0 14px rgba(26, 115, 232, 0.5));
+        }
+        100% {
+          transform: scale(0.85) rotate(90deg);
+          opacity: 0.85;
+          filter: drop-shadow(0 0 1px rgba(26, 115, 232, 0.4));
+        }
+      }
+      @keyframes coreGlow {
+        0%, 100% { r: 1.8px; opacity: 0.7; }
+        50% { r: 2.8px; opacity: 1; }
+      }
+      .anim-star-group {
+        transform-origin: 85px 36px;
+        animation: geminiStarShine 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      }
+      .anim-star-core {
+        animation: coreGlow 3.2s ease-in-out infinite;
+      }
+    </style>
+  </defs>
+
+  <!-- 柔和浅色容器外框 -->
+  <rect x="6" y="6" width="108" height="108" rx="26" fill="url(#lightBgGrad)" stroke="#E1E7EE" stroke-width="1.5" filter="url(#softShadow)" />
+
+  <!-- 外层月白银灰人字形 (MCP 基础架构) -->
+  <path d="M 32 80 L 60 38 L 88 80" fill="none" stroke="#D3DBE5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- 中层 Gemini 多色流光人字形 -->
+  <path d="M 38 78 L 60 45 L 82 78" fill="none" stroke="url(#geminiGrad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- 最内层活力青绿/青空翠蓝人字形 -->
+  <path d="M 46 76 L 60 54 L 74 76" fill="none" stroke="url(#tealGrad)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- 动态旋转与呼吸星芒组合 -->
+  <g class="anim-star-group">
+    <path d="M 85 22 Q 85 36 99 36 Q 85 36 85 50 Q 85 36 71 36 Q 85 36 85 22 Z" fill="url(#geminiGrad)" />
+    <circle class="anim-star-core" cx="85" cy="36" fill="#FFFFFF" r="2.2" />
+  </g>
+</svg>

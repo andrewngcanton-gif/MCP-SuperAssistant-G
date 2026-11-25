@@ -286,6 +286,30 @@ export class GeminiAdapter extends BaseAdapterPlugin {
   }
 
   /**
+   * Chip-click interception: is this event target the active composer's real Send control?
+   * The generic `submitButtonSelector` + container heuristic can miss Gemini's current control
+   * when it is replaced, sits beside other icon buttons, or the click lands on a nested SVG.
+   * Reuse the same compositor-scoped send recognition that submitForm relies on, and reject
+   * Stop/Mic/Attach and any control belonging to a different composer.
+   */
+  matchesNativeSendControl(target: EventTarget | null): boolean {
+    const element = target instanceof Element
+      ? target
+      : target instanceof Node
+        ? target.parentElement
+        : null;
+    if (!element) return false;
+
+    const control = element.closest('button');
+    if (!(control instanceof HTMLButtonElement)) return false;
+    if (!this.looksLikeSendControl(control) || this.isNonSendControl(control)) return false;
+
+    const composer = this.resolveComposerContext();
+    if (!composer || !composer.root.contains(control)) return false;
+    return !this.isControlDisabled(control);
+  }
+
+  /**
    * Submit the current text in the Gemini chat input.
    *
    * Auto-submit runs right after a chip flush, while Gemini may still be re-rendering the
@@ -297,7 +321,11 @@ export class GeminiAdapter extends BaseAdapterPlugin {
    *    cannot land in another conversation or send text the user edited.
    * There is deliberately no Enter-key fallback: it can double-send.
    */
-  async submitForm(options?: { formElement?: HTMLFormElement; readinessTimeoutMs?: number }): Promise<boolean> {
+  async submitForm(options?: {
+    formElement?: HTMLFormElement;
+    readinessTimeoutMs?: number;
+    canProceed?: () => boolean;
+  }): Promise<boolean> {
     if (this.submitInFlight) {
       this.context.logger.debug('Gemini submit already in flight; ignoring re-entrant call');
       return false;
@@ -305,6 +333,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     this.submitInFlight = true;
 
     try {
+      if (options?.canProceed && !options.canProceed()) return this.abortSubmit('Original composer is unavailable');
       const flushed = await inputChips.flushBeforeSubmit(this);
       if (!flushed) {
         // flushBeforeSubmit restores the chips on failure. Sending now could submit a partial draft.
@@ -313,6 +342,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
 
       this.context.logger.debug('Attempting to submit Gemini chat input');
 
+      if (options?.canProceed && !options.canProceed()) return this.abortSubmit('Original composer changed during chip flush');
       const composer = this.resolveComposerContext();
       if (!composer) return this.abortSubmit('Chat composer not found');
 
@@ -342,6 +372,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
           // Re-check synchronously immediately before the single click.
           const lateChange = this.getComposerChange(snapshot);
           if (lateChange) return this.abortSubmit(`Composer changed before click (${lateChange})`);
+          if (options?.canProceed && !options.canProceed()) return this.abortSubmit('Original composer changed before click');
 
           submitButton.click();
           this.emitExecutionCompleted('submitForm', {

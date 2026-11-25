@@ -125,6 +125,11 @@ export class SidebarManager extends BaseSidebarManager {
    * @param syncState - Whether to sync visibility state to Zustand (true for user actions, false for initialization)
    */
   public async show(syncState: boolean = true): Promise<void> {
+    if (this.isRouteSuspended()) {
+      logMessage('[SidebarManager] Show ignored: suspended for current route');
+      return;
+    }
+
     // CRITICAL FIX: Always ensure window reference is set before showing
     if (!window.activeSidebarManager || window.activeSidebarManager !== this) {
       logMessage('[SidebarManager] Ensuring window.activeSidebarManager reference is set during show()');
@@ -176,6 +181,11 @@ export class SidebarManager extends BaseSidebarManager {
    * Show the sidebar with tool outputs - Using Zustand store for preferences
    */
   public showWithToolOutputs(): void {
+    if (this.isRouteSuspended()) {
+      logMessage('[SidebarManager] Show ignored: suspended for current route');
+      return;
+    }
+
     // CRITICAL FIX: Ensure window reference is set immediately
     if (!window.activeSidebarManager || window.activeSidebarManager !== this) {
       logMessage('[SidebarManager] Ensuring window.activeSidebarManager reference is set in showWithToolOutputs()');
@@ -201,6 +211,12 @@ export class SidebarManager extends BaseSidebarManager {
 
     this.initializationTimeout = setTimeout(async () => {
       try {
+        // The route can change during the delay; never render on a suspended route.
+        if (this.isRouteSuspended()) {
+          logMessage('[SidebarManager] Aborting delayed show: suspended for current route');
+          return;
+        }
+
         logMessage('[SidebarManager] Starting delayed sidebar initialization');
 
         // Verify window reference is still set after delay
@@ -286,6 +302,11 @@ export class SidebarManager extends BaseSidebarManager {
     // Initialize the sidebar DOM without rendering React yet
     await this.initialize();
 
+    if (this.isRouteSuspended()) {
+      logMessage('[SidebarManager] Initialization aborted: suspended for current route');
+      return;
+    }
+
     try {
       // Get preferences from Zustand store
       const preferences = getZustandPreferences();
@@ -349,6 +370,10 @@ export class SidebarManager extends BaseSidebarManager {
       );
       // Fallback initialization
       await this.initialize();
+      if (this.isRouteSuspended()) {
+        logMessage('[SidebarManager] Fallback initialization aborted: suspended for current route');
+        return;
+      }
       if (this.shadowHost) {
         this.shadowHost.setAttribute('data-initial-minimized', 'false');
         this.shadowHost.style.display = 'block';
@@ -397,6 +422,10 @@ export class SidebarManager extends BaseSidebarManager {
   private async fallbackInitialization(): Promise<void> {
     try {
       await this.initialize();
+      if (this.isRouteSuspended()) {
+        logMessage('[SidebarManager] Fallback initialization skipped: suspended for current route');
+        return;
+      }
       if (this.shadowHost) {
         this.shadowHost.setAttribute('data-initial-minimized', 'false');
         this.shadowHost.style.display = 'block';
@@ -672,5 +701,22 @@ export class SidebarManager extends BaseSidebarManager {
     
     // Call the parent hide method
     return super.hide();
+  }
+
+  /**
+   * Suspend rendering for a route that must not show the sidebar (e.g. Gemini Usage).
+   * Cancels any pending delayed show so it cannot re-open after suspension, and does not
+   * sync the Zustand visibility state: the user's preference must survive the route.
+   */
+  public suspendForRoute(): void {
+    if (this.initializationTimeout) {
+      clearTimeout(this.initializationTimeout);
+      this.initializationTimeout = null;
+    }
+    this.isInitializing = false;
+
+    super.suspendForRoute();
+
+    logMessage('[SidebarManager] Suspended sidebar for current route (preference preserved)');
   }
 }

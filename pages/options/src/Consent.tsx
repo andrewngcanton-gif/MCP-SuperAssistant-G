@@ -21,7 +21,7 @@ const Consent = () => {
     <div className="flex min-h-screen items-center justify-center bg-neutral-50 p-5 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <div className="flex w-full max-w-sm flex-col gap-4">
         <div className="flex items-center gap-3">
-          <img src="/icon-34.png" alt="" className="h-8 w-8" />
+          <img src="/icon.svg" alt="" className="h-8 w-8" />
           <h1 className="text-base font-semibold">Share anonymous usage statistics?</h1>
         </div>
         {granted ? (

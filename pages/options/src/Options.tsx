@@ -149,7 +149,7 @@ const OptionsInner = () => {
       <div className="mx-auto flex max-w-[680px] flex-col gap-6 px-5 py-10">
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/icon-34.png" alt="" className="h-8 w-8" />
+            <img src="/icon.svg" alt="" className="h-8 w-8" />
             <div>
               <h1 className="text-lg font-semibold">MCP SuperAssistant</h1>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">Settings · v{version}</p>

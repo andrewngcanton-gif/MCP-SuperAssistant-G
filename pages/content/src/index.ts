@@ -35,6 +35,7 @@ import {
 import { initializeAllServices, cleanupAllServices } from './services';
 import { receiveCapture } from './services/capture-receiver';
 import { createLogger } from '@extension/shared/lib/logger';
+import { isGeminiUsageLocation } from './utils/gemini-usage';
 
 // Add this as a global recovery mechanism for the sidebar
 
@@ -44,6 +45,9 @@ function setupSidebarRecovery(): void {
   // Watch for the case where push mode is enabled but sidebar isn't visible
   setInterval(() => { // lives as long as the page; no cleanup needed
     try {
+      // Gemini Usage is not a chat surface; never force the sidebar onto it.
+      if (isGeminiUsageLocation()) return;
+
       // Check if there's an active sidebar manager
       const sidebarManager = (window as any).activeSidebarManager;
       if (!sidebarManager) return;

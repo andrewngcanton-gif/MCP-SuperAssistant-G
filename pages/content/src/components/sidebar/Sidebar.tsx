@@ -647,18 +647,14 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between flex-shrink-0 sidebar-header">
         {!isMinimized ? (
           <>
-            <a
-              href="https://mcpsuperassistant.ai/"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Visit MCP Super Assistant Website"
-              className="flex items-center gap-2 no-underline">
-              <img src={chrome.runtime.getURL('icon-34.png')} alt="MCP Logo" className="w-5 h-5 rounded" />
-              <span className="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100">
-                MCP SuperAssistant
-              </span>
-            </a>
-            <div className="flex items-center gap-1">
+            <div className="flex min-w-0 flex-1 items-center">
+              <img
+                src={chrome.runtime.getURL('superassistant-banner.svg')}
+                alt="MCP SuperAssistant"
+                className="block h-auto w-full min-w-0 max-w-[232px] object-contain"
+              />
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
               {/* Theme Toggle Button */}
               <Button
                 variant="ghost"
@@ -694,7 +690,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
               className="h-7 w-7 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800">
               <Icon name="chevron-left" className="h-4 w-4" />
             </Button>
-            <img src={chrome.runtime.getURL('icon-34.png')} alt="MCP Logo" className="w-5 h-5 rounded" />
+            <img src={chrome.runtime.getURL('icon.svg')} alt="MCP Logo" className="w-5 h-5 rounded" />
             <span
               className={cn(
                 'w-2 h-2 rounded-full',

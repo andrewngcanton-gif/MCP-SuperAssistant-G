@@ -225,27 +225,30 @@ const OVERLAY_STYLES = `
   }
 `;
 
-// A click on a send control is intercepted only while chips are pending. If the control is really
-// Stop/Mic/Attach (Gemini swaps Send for Stop in place), its native action must survive.
-const NON_SUBMIT_CONTROL_RE =
-  /(?:^|[\s_-])(?:stop|microphone|mic|voice|audio|dictation|attach|attachment|upload|add\s*files?)(?:[\s_-]|$)/i;
-
-function isObviousNonSubmitControl(control: Element): boolean {
-  const className = typeof control.className === 'string' ? control.className : '';
-  const vocabulary = [
-    control.getAttribute('aria-label'),
-    control.getAttribute('title'),
-    control.getAttribute('data-test-id'),
-    control.getAttribute('data-testid'),
-    className,
-  ].filter(Boolean).join(' ');
-  return NON_SUBMIT_CONTROL_RE.test(vocabulary);
+/**
+ * Pure decision for the Enter interception. Kept as a standalone export so cell/unit tests can
+ * cover the conditions without pretending jsdom can synthesize a trusted user key event.
+ * Only a plain Enter inside the composer submits; Shift+Enter, modifier chords and IME
+ * composition keep their native behaviour.
+ */
+export function isChipSubmitEnter(
+  event: Pick<KeyboardEvent, 'isTrusted' | 'key' | 'shiftKey' | 'ctrlKey' | 'metaKey' | 'altKey' | 'isComposing' | 'keyCode'>,
+): boolean {
+  return event.isTrusted
+    && event.key === 'Enter'
+    && !event.shiftKey
+    && !event.ctrlKey
+    && !event.metaKey
+    && !event.altKey
+    && !event.isComposing
+    && event.keyCode !== 229;
 }
 
 class InputChipManager {
   private chips: Chip[] = [];
   private adapter: AdapterPlugin | null = null;
   private flushing = false;
+  private sending = false;
   private host: HTMLElement | null = null;
   private shadow: ShadowRoot | null = null;
   private bar: HTMLElement | null = null;
@@ -253,6 +256,7 @@ class InputChipManager {
   private overlayShadow: ShadowRoot | null = null;
   private watchdog: number | null = null;
   private listenersAttached = false;
+  private listenerHost: Window | Document | null = null;
   private openPreviewChipId: string | null = null;
   private themeVars: Record<string, string> = {};
 
@@ -363,6 +367,7 @@ class InputChipManager {
     this.stopWatchdog();
     this.adapter = null;
     this.flushing = false;
+    this.sending = false;
   }
 
   // --- UI ---------------------------------------------------------------
@@ -500,6 +505,37 @@ class InputChipManager {
       this.bar.appendChild(pill);
     }
     this.renderPreview();
+  }
+
+  /** Draft currently in the adapter's native editor, or null when the composer is gone. */
+  private readNativeDraft(): string | null {
+    const input = this.adapter?.getChipAnchors?.()?.input;
+    if (!input) return null;
+    if (input.tagName === 'TEXTAREA' || input.tagName === 'INPUT') {
+      return (input as HTMLTextAreaElement).value;
+    }
+    return input.textContent ?? '';
+  }
+
+  /**
+   * After a failed submit: if the composer was replaced/removed before the merged payload
+   * survived, put the same pending chips back so the user can retry. If the payload is already
+   * in the editor (the common "merge succeeded, send did not" case), leave the chips consumed —
+   * restoring them would make a later send carry the same instructions twice.
+   */
+  private restoreChipsIfPayloadLost(pending: Chip[]): void {
+    if (this.chips.length || !pending.length || !this.adapter) return;
+    const draft = this.readNativeDraft();
+    if (draft != null && pending.every(chip => draft.includes(chip.text))) return;
+
+    this.chips = pending;
+    this.ensureWatchdog();
+    const anchors = this.adapter.getChipAnchors?.();
+    if (anchors) {
+      this.ensureUI(anchors);
+      this.ensureListeners();
+    }
+    this.renderBar();
   }
 
   private renderPreview(): void {
@@ -657,45 +693,106 @@ class InputChipManager {
   // --- submit interception (user-initiated) -----------------------------
 
   private onKeydown = (e: KeyboardEvent): void => {
-    if (!e.isTrusted || e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
-    if (!this.chips.length || this.flushing || !this.adapter) return;
+    if (!isChipSubmitEnter(e) || !this.adapter) return;
     const anchors = this.adapter.getChipAnchors?.();
     if (!anchors) return;
     const target = e.target as Node | null;
     if (!target || !anchors.input.contains(target)) return;
+    // A merge/submit already owns this gesture: swallow a second Enter so the page cannot send
+    // the draft a second time while the chip payload is being merged.
+    if (this.flushing || this.sending) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (!this.chips.length) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    void this.adapter.submitForm?.();
+    void this.submitWithPendingChips(this.adapter);
   };
 
   private onClick = (e: MouseEvent): void => {
-    if (!e.isTrusted) return;
-    if (!this.chips.length || this.flushing || !this.adapter) return;
+    if (!e.isTrusted || !this.adapter) return;
+
+    // Gemini's real Send control can be replaced or sit next to other icon controls, and the
+    // click target is often a nested SVG/span. Ask the adapter itself (composer-scoped send
+    // recognition) instead of re-deriving it from a selector: this intercepts the composer's
+    // Send only, never Stop/mic/attach or another composer's control.
+    if (this.adapter.name === 'GeminiAdapter') {
+      const path = e.composedPath?.() ?? [];
+      const target = path.find(node => node instanceof Element && node.tagName === 'BUTTON');
+      if (!target) return;
+      if (!this.adapter.matchesNativeSendControl?.(target)) return;
+      if (this.flushing || this.sending) {
+        // Duplicate click while the pending payload is mid-merge: swallow it, never let the page
+        // dispatch a second turn.
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+      if (!this.chips.length) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      void this.submitWithPendingChips(this.adapter);
+      return;
+    }
+
+    if (!this.chips.length || this.flushing || this.sending) return;
     const anchors = this.adapter.getChipAnchors?.();
     if (!anchors || !anchors.submitButtonSelector) return;
     const target = e.target as Element | null;
     const control = target?.closest?.(anchors.submitButtonSelector) ?? null;
-    // Only intercept the composer's own send control; leave stop/mic controls and unrelated
-    // page buttons (e.g. "Send feedback") to their native behaviour.
+    // Only intercept the composer's own send control; leave unrelated page buttons to their
+    // native behaviour. Gemini is handled above with adapter-scoped recognition.
     if (!control) return;
-    if (this.adapter.name === 'GeminiAdapter' &&
-        (!anchors.container.contains(control) || isObviousNonSubmitControl(control))) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    void this.adapter.submitForm?.();
+    void this.submitWithPendingChips(this.adapter);
   };
+
+  /** Shared user-gesture path: flush pending chips through the adapter, then submit exactly once. */
+  private async submitWithPendingChips(adapter: AdapterPlugin): Promise<void> {
+    if (this.sending || this.flushing || !this.chips.length || !adapter.submitForm) return;
+    const guardComposer = adapter.name === 'GeminiAdapter' || adapter.name === 'AIStudioAdapter';
+    const input = guardComposer ? adapter.getChipAnchors?.()?.input : undefined;
+    if (guardComposer && !input) return;
+
+    const href = window.location.href;
+    const sameConversation = () => this.adapter === adapter && window.location.href === href;
+    const options = input ? {
+      canProceed: () => sameConversation() && input.isConnected && adapter.getChipAnchors?.()?.input === input,
+    } : undefined;
+    const pending = this.chips.slice();
+    this.sending = true;
+    try {
+      const sent = await adapter.submitForm(options);
+      if (!sent && sameConversation()) this.restoreChipsIfPayloadLost(pending);
+    } catch (error) {
+      logger.error('Chip submit failed', error);
+      if (sameConversation()) this.restoreChipsIfPayloadLost(pending);
+    } finally {
+      this.sending = false;
+      if (this.chips.length) this.renderBar();
+    }
+  }
 
   private ensureListeners(): void {
     if (this.listenersAttached) return;
-    document.addEventListener('keydown', this.onKeydown, true);
-    document.addEventListener('click', this.onClick, true);
+    // Gemini binds Enter/click on the composer itself and can dispatch the user's turn before a
+    // document-capture listener runs. Window capture is the earliest extension hook, so the chip
+    // payload is merged before Gemini reads the draft. Other hosts keep the legacy document hook.
+    const host: Window | Document = this.adapter?.name === 'GeminiAdapter' ? window : document;
+    host.addEventListener('keydown', this.onKeydown as EventListener, true);
+    host.addEventListener('click', this.onClick as EventListener, true);
+    this.listenerHost = host;
     this.listenersAttached = true;
   }
 
   private removeListeners(): void {
-    if (!this.listenersAttached) return;
-    document.removeEventListener('keydown', this.onKeydown, true);
-    document.removeEventListener('click', this.onClick, true);
+    if (!this.listenersAttached || !this.listenerHost) return;
+    this.listenerHost.removeEventListener('keydown', this.onKeydown as EventListener, true);
+    this.listenerHost.removeEventListener('click', this.onClick as EventListener, true);
+    this.listenerHost = null;
     this.listenersAttached = false;
   }
 
@@ -713,6 +810,7 @@ class InputChipManager {
       }
       if (!this.host?.isConnected || this.host.parentElement !== anchors.container) {
         this.ensureUI(anchors);
+        this.ensureListeners();
       }
     }, 800);
   }

@@ -54,7 +54,6 @@ tasks.json
 tasks/
 
 # Local-only source (intentionally untracked; do not commit — may hold local config)
-chrome-extension/public/icon-16.png
 chrome-extension/src/mcpclient/architecture-option-3-plugin-based.md
 pages/content/src/plugins/adapters/gemini-migration-guide.md
 pages/content/src/plugins/adapters/scira.adapter.ts

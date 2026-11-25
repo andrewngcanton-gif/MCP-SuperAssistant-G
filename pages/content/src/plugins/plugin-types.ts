@@ -92,7 +92,13 @@ export interface AdapterPlugin {
   insertText?(text: string, options?: { targetElement?: HTMLElement; source?: 'instructions' | 'tool-result' | 'capture' | 'tab-content' | 'unknown'; label?: string }): Promise<boolean>;
   /** Pilot adapters return anchors for the input-chip UI; null/undefined = no chip support (raw insert). */
   getChipAnchors?(): ChipAnchors | null;
-  submitForm?(options?: { formElement?: HTMLFormElement }): Promise<boolean>;
+  /**
+   * Recognize this adapter's current native Send control from any event target (nested SVG/span,
+   * replaced/adjacent composer controls). Used to intercept a real user send while chips are
+   * pending so the chips flush before the native turn is dispatched.
+   */
+  matchesNativeSendControl?(target: EventTarget | null): boolean;
+  submitForm?(options?: { formElement?: HTMLFormElement; canProceed?: () => boolean }): Promise<boolean>;
   attachFile?(file: File, options?: { inputElement?: HTMLInputElement }): Promise<boolean>;
 
   // Optional capabilities

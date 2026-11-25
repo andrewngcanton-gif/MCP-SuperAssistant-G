@@ -2,6 +2,7 @@ import type { AdapterPlugin, PluginContext, AdapterCapability } from './plugin-t
 import { SidebarManager } from '../components/sidebar/SidebarManager';
 import type { SiteType } from '../components/sidebar/base/BaseSidebarManager';
 import { useUIStore } from '../stores/ui.store';
+import { isGeminiUsageLocation } from '../utils/gemini-usage';
 import { createLogger } from '@extension/shared/lib/logger';
 const logger = createLogger('SidebarPlugin');
 
@@ -25,6 +26,7 @@ export class SidebarPlugin implements AdapterPlugin {
   private isActive = false;
   private cleanupFunctions: (() => void)[] = [];
   private isShowingSidebar = false; // Track sidebar state to prevent loops
+  private isSuspendedForUsage = false; // Gemini Usage route must not host the chat sidebar
 
   async initialize(context: PluginContext): Promise<void> {
     this.context = context;
@@ -56,6 +58,17 @@ export class SidebarPlugin implements AdapterPlugin {
     }
 
     logger.debug('Activating sidebar plugin...');
+
+    if (isGeminiUsageLocation()) {
+      // Direct load of Gemini Usage: stay inert, but remember to resume if the SPA navigates to chat.
+      logger.debug(`Skipping sidebar activation on Gemini Usage page: ${pathname}`);
+      this.isSuspendedForUsage = true;
+      this.isShowingSidebar = false;
+      this.isActive = true;
+      return;
+    }
+
+    this.isSuspendedForUsage = false;
 
     try {
       // Initialize sidebar manager for current site
@@ -96,6 +109,7 @@ export class SidebarPlugin implements AdapterPlugin {
       // Reset state
       this.isActive = false;
       this.isShowingSidebar = false;
+      this.isSuspendedForUsage = false;
 
       logger.debug('Sidebar plugin deactivated successfully');
 
@@ -132,6 +146,7 @@ export class SidebarPlugin implements AdapterPlugin {
       // Reset all state
       this.isActive = false;
       this.isShowingSidebar = false;
+      this.isSuspendedForUsage = false;
 
       logger.debug('Sidebar plugin cleanup completed');
 
@@ -157,6 +172,12 @@ export class SidebarPlugin implements AdapterPlugin {
    * Show the sidebar (respects user's last visibility preference)
    */
   async showSidebar(): Promise<void> {
+    if (isGeminiUsageLocation()) {
+      this.suspendForUsageRoute();
+      logger.debug('Ignoring sidebar show request on Gemini Usage page');
+      return;
+    }
+
     // Prevent infinite loops
     if (this.isShowingSidebar) {
       this.context?.logger.warn('Sidebar already showing, skipping to prevent loop');
@@ -229,6 +250,45 @@ export class SidebarPlugin implements AdapterPlugin {
 
   // Private methods
 
+  /**
+   * Gemini Usage is not a chat surface: hide the sidebar immediately, release push-mode
+   * layout, and block later show/recovery attempts without persisting a hidden preference.
+   */
+  private suspendForUsageRoute(): void {
+    if (!this.isSuspendedForUsage) {
+      logger.debug('Entering Gemini Usage route, suspending sidebar');
+    }
+
+    this.isSuspendedForUsage = true;
+    this.isShowingSidebar = false;
+
+    if (this.sidebarManager) {
+      this.sidebarManager.suspendForRoute();
+    }
+  }
+
+  /**
+   * Leaving Gemini Usage: lift the suspension and let the normal preference-aware show path
+   * decide whether the sidebar should be visible again.
+   */
+  private async resumeFromUsageRoute(): Promise<void> {
+    logger.debug('Leaving Gemini Usage route, restoring sidebar if enabled');
+
+    this.isSuspendedForUsage = false;
+    this.isShowingSidebar = false;
+
+    if (!this.isActive) {
+      return;
+    }
+
+    if (this.sidebarManager) {
+      this.sidebarManager.resumeFromRouteSuspension();
+    }
+
+    await this.initializeSidebarManager();
+    await this.showSidebar();
+  }
+
   private async initializeSidebarManager(): Promise<void> {
     if (this.sidebarManager) {
       return; // Already initialized
@@ -284,6 +344,16 @@ export class SidebarPlugin implements AdapterPlugin {
     // Listen for site changes to reinitialize sidebar manager
     const unsubscribeSiteChange = this.context.eventBus.on('app:site-changed', async (data) => {
       logger.debug(`Site changed to: ${data.hostname}`);
+
+      if (isGeminiUsageLocation()) {
+        this.suspendForUsageRoute();
+        return;
+      }
+
+      if (this.isSuspendedForUsage) {
+        await this.resumeFromUsageRoute();
+        return;
+      }
 
       // Determine if this is actually a different site or just a URL change within the same site
       const currentSiteType = this.determineSiteType(data.hostname);

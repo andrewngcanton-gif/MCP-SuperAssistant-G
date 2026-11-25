@@ -37,6 +37,7 @@ export abstract class BaseSidebarManager {
   protected shadowHost: HTMLDivElement | null = null;
   protected shadowRoot: ShadowRoot | null = null;
   protected _isPushContentMode: boolean = false;
+  private _isRouteSuspended = false;
   private _initializationPromise: Promise<void> | null = null;
   private _isInitialized = false;
 
@@ -101,6 +102,12 @@ export abstract class BaseSidebarManager {
    * @param isCollapsed Optional flag indicating if the sidebar is collapsed
    */
   public setPushContentMode(enabled: boolean, sidebarWidth?: number, isCollapsed?: boolean): void {
+    if (enabled && this._isRouteSuspended) {
+      // A route that must not be pushed (e.g. Gemini Usage) owns the layout while suspended.
+      logMessage('[BaseSidebarManager] Ignoring push mode enable while route-suspended');
+      return;
+    }
+
     this._isPushContentMode = enabled;
 
     if (enabled) {
@@ -180,6 +187,11 @@ export abstract class BaseSidebarManager {
    * Used in emergency situations when we must ensure visibility
    */
   private forceVisibility(): void {
+    if (this._isRouteSuspended) {
+      logMessage('[BaseSidebarManager] Cannot force visibility: suspended for current route');
+      return;
+    }
+
     if (!this._isInitialized) {
       logMessage('[BaseSidebarManager] Cannot force visibility: not initialized');
       return;
@@ -229,6 +241,43 @@ export abstract class BaseSidebarManager {
     document.documentElement.style.removeProperty('width');
     document.documentElement.style.removeProperty('min-height');
     document.documentElement.classList.remove('push-mode-enabled', 'sidebar-collapsed');
+  }
+
+  /**
+   * Suspend the sidebar for a route that must not show it (e.g. Gemini Usage).
+   * Hides immediately, clears push-mode layout, and blocks later show/push attempts without
+   * touching the persisted user preference, so returning to a chat route can restore it.
+   */
+  public suspendForRoute(): void {
+    this._isRouteSuspended = true;
+
+    if (this.shadowHost) {
+      this.shadowHost.classList.remove('initialized', 'showing', 'hiding');
+      this.shadowHost.style.transition = '';
+      this.shadowHost.style.display = 'none';
+      this.shadowHost.style.opacity = '0';
+      this.shadowHost.style.transform = '';
+    }
+
+    this._isVisible = false;
+    this.setPushContentMode(false);
+
+    logMessage('[BaseSidebarManager] Sidebar suspended for current route');
+  }
+
+  /**
+   * Lift the route suspension. Showing is left to the normal preference-aware show path.
+   */
+  public resumeFromRouteSuspension(): void {
+    this._isRouteSuspended = false;
+    logMessage('[BaseSidebarManager] Route suspension lifted');
+  }
+
+  /**
+   * Whether the sidebar is suspended for the current route.
+   */
+  public isRouteSuspended(): boolean {
+    return this._isRouteSuspended;
   }
 
   /**
@@ -456,6 +505,12 @@ export abstract class BaseSidebarManager {
    * Show the sidebar
    */
   public async show(): Promise<void> {
+    if (this._isRouteSuspended) {
+      logMessage('[BaseSidebarManager] Show ignored: sidebar suspended for current route');
+      this._isVisible = false;
+      return;
+    }
+
     // Set intended visibility state *before* ensuring initialization
     this._isVisible = true;
     logMessage('[BaseSidebarManager] Show requested, setting _isVisible = true');
@@ -467,6 +522,12 @@ export abstract class BaseSidebarManager {
       logMessage('Initialization failed during show(), cannot proceed.');
       this._isVisible = false; // Reset visibility if init failed
       return; // Don't proceed if initialization failed
+    }
+
+    if (this._isRouteSuspended) {
+      logMessage('[BaseSidebarManager] Show aborted after initialization: suspended for current route');
+      this._isVisible = false;
+      return;
     }
 
     // Check again if initialization succeeded (root and host must exist)
