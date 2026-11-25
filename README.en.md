@@ -14,6 +14,21 @@ The upstream baseline is commit `30bb204`. [`main` holds the upstream source sna
 
 This project supports and acknowledges the LINUX DO community. Thank you for giving developers a place to share their work and learn from one another. [LINUX DO](https://linux.do/)
 
+## Contents
+
+- [Bug fixes](#bug-fixes)
+- [New features and improvements](#new-features-and-improvements)
+- [Install in Chrome](#install-in-chrome)
+  - [1. Install the prerequisites](#1-install-the-prerequisites)
+  - [2. Clone and build](#2-clone-and-build)
+  - [3. Load the unpacked extension](#3-load-the-unpacked-extension)
+  - [4. Connect an MCP server](#4-connect-an-mcp-server)
+    - [Connect WebCodex](#connect-webcodex)
+      - [Get the user token and generate the local config (Windows)](#get-the-user-token-and-generate-the-local-config-windows)
+  - [5. Test and update](#5-test-and-update)
+- [Known issues](#known-issues)
+- [License](#license)
+
 ## Bug fixes
 
 - **Gemini Auto Submit could stall.** The extension waits for an enabled Send button in the current composer, checks that the conversation and draft are still current, and clicks once. Batching ignores stale loading cards from earlier turns and continues to wait for active tools in the current batch.
