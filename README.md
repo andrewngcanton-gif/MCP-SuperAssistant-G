@@ -1,345 +1,84 @@
-
-<div align="center">
-   <!-- <img src="chrome-extension/public/icon-34.png" alt="MCP SuperAssistant Logo" width="100" height="100"> -->
-   <h1>MCP SuperAssistant Chrome Extension</h1>
-</div>
+# MCP SuperAssistant G
 
 <p align="center">
-Brings MCP to ChatGPT, Perplexity, Grok, Gemini, Google AI Studio, OpenRouter, Kimi, Github Copilot, Mistral and more...
+  <img src="chrome-extension/public/superassistant-banner.svg" alt="MCP SuperAssistant G 横幅" width="640">
 </p>
 
-<p align="center">
-   <a href="https://mcpsuperassistant.ai/" target="_blank"><strong>🌐 Visit Official Website</strong></a>
-</p>
+[English README](README.en.md)
 
-<!-- ![MCP SuperAssistant](chrome-extension/public/Cover3.jpg) -->
-<div align="center">
- <img src="chrome-extension/public/Cover5.jpg" alt="MCP SuperAssistant Cover" width="800">
-</div>
+**MCP SuperAssistant G** 是基于 [原版 MCP SuperAssistant v0.7.3](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3) 的社区定制版。它让 Gemini、Google AI Studio 等网页 AI 通过浏览器扩展使用 MCP 工具。本项目通过 GitHub 提供源码，使用 Chrome 开发者模式加载自行构建的扩展。
 
-<div align="center">
-   
-   ![Latest Release](https://img.shields.io/github/v/release/srbhptl39/MCP-SuperAssistant?style=flat-square&label=Latest%20Release&color=brightgreen)
-   ![GitHub Stars](https://img.shields.io/github/stars/srbhptl39/MCP-SuperAssistant?style=flat-square&label=Stars)
-   ![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
-   ![Chrome Users](https://img.shields.io/chrome-web-store/users/kngiafgkdnlkgmefdafaibkibegkcaef?style=flat-square&label=Chrome%20Users)
-   ![Firefox Users](https://img.shields.io/amo/users/mcp-superassistant?style=flat-square&label=Firefox%20Users)
-   ![Build Status](https://img.shields.io/badge/Status-Active-success?style=flat-square)
+原版基线为 `30bb204`。 [`main` 保存原版源码快照，`custom` 是本项目的默认分支](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/compare/main...custom)。
 
-</div>
+## 相比原版修复了什么
 
-## Installation
+- **Gemini 自动发送卡住。** 等待当前输入框可用的发送按钮，在确认会话和草稿仍有效后只点击一次。合批时过滤残留的历史加载卡片，继续等待本批仍在运行的工具。
+- **Gemini 手动发送漏带 MCP Instructions。** **Insert** 保留原来的小卡片。输入任务后点击 Gemini 的原生发送按钮或按 Enter，待发送的指令会随草稿合并发出。
+- **Gemini 用量页侧栏显示异常。** 在 `/usage` 与 `/u/<账号序号>/usage` 暂停显示聊天侧栏，返回聊天时恢复之前的侧栏状态。
+- **AI Studio 打开历史对话时重复执行或回传结果。** 历史工具卡片保持手动操作，当前工具调用因卡片重新渲染产生的重复自动执行和结果回传会被去重。
+- **AI Studio 晚到的工具结果无法自动发送。** 同一会话内仍有效的晚到结果可以继续回传。**Run** 忙时等待原输入框就绪，编辑草稿或切换会话会取消待发送。
+- **Auto Submit 重复等待。** 配置的 Auto Submit 延时在合批阶段计入一次。设为 2 秒时，可省去约 2 秒的固定等待。Auto Insert 的独立延时、合批和按钮就绪检查仍然适用。
 
-<div align="center" style="display: flex; justify-content: center; gap: 20px; align-items: center;">
-   <a href="https://chromewebstore.google.com/detail/mcp-superassistant/kngiafgkdnlkgmefdafaibkibegkcaef?hl=en"><img src="https://developer.chrome.com/static/docs/webstore/branding/image/HRs9MPufa1J1h5glNhut.png" alt="Chrome Web Store" width="200" height="auto" style="vertical-align: middle;" /></a>
-   <a href="https://addons.mozilla.org/en-US/firefox/addon/mcp-superassistant/"><img src="https://blog.mozilla.org/addons/files/2015/11/get-the-addon.png" alt="Firefox Add-ons" width="200" height="auto" style="vertical-align: middle;" /></a>
-</div>
+## 新功能与改进
 
-<br>
+- **WebCodex RTK 开关。** 侧栏 **Instructions → Use RTK with WebCodex** 默认关闭。开启后，如果已启用兼容的 WebCodex 工具，生成的指令会提示模型从第一条适用的 `run_process` 命令起使用 Runner 上已有的 RTK 来压缩长输出。
+- **WebCodex 文件编辑规则。** 指令说明 `edit_project_files` 必须提供 `project` 和 `changes`，每项包含 `kind` 和 `path`。内容复杂或首次报错时，提示模型改用同一 WebCodex 服务上可用的 `run_shell`。
+- **更短的 MCP Instructions。** 精简 Compact 和 JSON 两种模板的自然语言，保留必填参数、schema 查询方式、调用示例以及 WebCodex 和 RTK 规则。去掉收到 schema 错误提示就重试的通用指令。
+- **CrewDispatch 代理配置开关。** 默认关闭。配置生成器可按需注册已安装的 CrewDispatch MCP 服务。修改开关后重新生成代理配置并重启代理即可生效。 [CrewDispatch 配置指南](CUSTOMIZATIONS.md#crewdispatch-opt-in-proxy-configuration)
+- **新图标和侧栏横幅。** 更新扩展和网页内的 MCP 图标，使用新版侧栏横幅，并移除横幅原有的站外跳转。
 
-## Overview
+## 在 Chrome 中安装
 
-MCP SuperAssistant is a Chrome and Firefox extension that brings Model Context Protocol (MCP) tools to the AI chat sites you already use, such as ChatGPT, Claude, Gemini, Perplexity and Grok. Tool calls written by the AI show up as compact cards you can run with one click, and the results go back into the conversation.
+### 1. 准备构建环境
 
-## Currently Supported Platforms
-
-- [ChatGPT](https://chatgpt.com/) (signed in or signed out)
-- [Claude](https://claude.ai/)
-- [Google Gemini](https://gemini.google.com/)
-- [Perplexity](https://perplexity.ai/)
-- [Grok](https://grok.com/) and [Grok on X](https://x.com/i/grok)
-- [Google AI Studio](https://aistudio.google.com/)
-- [OpenRouter Chat](https://openrouter.ai/chat)
-- [DeepSeek](https://chat.deepseek.com/)
-- [T3 Chat](https://t3.chat/)
-- [GitHub Copilot](https://github.com/copilot)
-- [Mistral AI](https://chat.mistral.ai/)
-- [Kimi](https://kimi.com/) ([kimi.ai](https://www.kimi.ai/))
-- [Qwen Chat](https://chat.qwen.ai/)
-- [Z Chat](https://chat.z.ai/)
-
-
-## Demo Video
-
-Kimi.com
-
-[![MCP SuperAssistant Demo](https://img.youtube.com/vi/jnBPh2jzunM/0.jpg)](https://www.youtube.com/watch?v=jnBPh2jzunM)
-
-ChatGPT
-
-[![MCP SuperAssistant Demo](https://img.youtube.com/vi/PY0SKjtmy4E/0.jpg)](https://www.youtube.com/watch?v=PY0SKjtmy4E)
-
-Watch the demo to see MCP SuperAssistant in action!
-
-[MCP SuperAssistant Demo Playlist](https://www.youtube.com/playlist?list=PLOK1DBnkeaJFzxC4M-z7TU7_j04SShX_w)
-
-## Setup Tutorial
-
-[![Setup Tutorial](https://img.youtube.com/vi/h9f_GX1Ef20/0.jpg)](https://www.youtube.com/watch?v=h9f_GX1Ef20&pp=ygUTbWNwIHN1cGVyIGFzc2lzdGFudA%3D%3D)
-
-**New to MCP SuperAssistant?** Watch this complete setup guide to get started in minutes!
-
-[View Setup Tutorial](https://www.youtube.com/watch?v=h9f_GX1Ef20&pp=ygUTbWNwIHN1cGVyIGFzc2lzdGFudA%3D%3D)
-
-## What is MCP?
-
-The Model Context Protocol (MCP) is an open standard developed by Anthropic that connects AI assistants to systems where data actually lives, including content repositories, business tools, and development environments. It serves as a universal protocol that enables AI systems to securely and dynamically interact with data sources in real time.
-
-## Key Features
-
-- **Multiple AI Platform Support**: Works with every site in the list above, in Chrome and Firefox
-- **Compact tool cards**: Each tool call renders as one quiet row (name, description, Run). Parameters, the raw call, run history and results stay folded until you open them
-- **Instruction chips**: The MCP instructions sit in a small chip in the chat bar instead of filling your message; your own text stays readable in the sent message
-- **Flicker-free rendering**: Cards replace the raw tool-call text before the page paints, so reloading a chat shows no raw JSON
-- **Tool Execution**: Execute MCP tools with a single click
-- **Tool Result Integration**: Seamlessly insert tool execution results back into the AI conversation
-- **Tab & page context**: Attach open tabs or capture the current page into the chat (optional; asks for browser access in a small window first)
-- **Browser tools** (optional): Let the AI read and, if you allow it, control your tabs, with a block list for sensitive sites
-- **Auto-Execute Mode**: Automatically execute detected tools
-- **Auto-Submit Mode**: Automatically submit chat input after result insertion
-- **Push Content Mode**: Option to push page content instead of overlaying
-- **Preferences Persistence**: Remembers sidebar position, size, and settings
-- **Dark/Light Mode Support**: Adapts to the AI platform's theme
-
-```mermaid
-flowchart TD
-    A[AI Chat Interface] -->|Generate| B[Tool Calls]
-    B -->|Detect| C[Extension Detects Tool Calls]
-    C -->|Send via SSE| D[MCP Local Proxy Server]
-    D -->|Forward| E[Actual MCP Server]
-    E -->|Return Results| D
-    D -->|Return Results| C
-    C -->|Insert| F[Add Results Back to Chat]
-```
-
-### Connecting to Local Proxy Server
-
-To connect the Chrome extension to a local server for proxying connections:
-
-#### Run MCP SuperAssistant Proxy via npx:
-
-1. Create a `config.json` file with your MCP server details. For example, to use the [Desktop Commander](https://github.com/wonderwhy-er/DesktopCommanderMCP):
-
-
-   **Example config.json:**
-   ```json
-   {
-     "mcpServers": {
-       "desktop-commander": {
-         "command": "npx",
-         "args": [
-           "-y",
-           "@wonderwhy-er/desktop-commander"
-         ]
-       }
-     }
-   }
-   ```
-   config.json also support other MCP server configurations like remote MCP server URLs.
-   Try composio mcp, zappier mcp, or smithery or any other remote MCP server.
-
-   **Or use existing config file location from Cursor or other tools:**
-   ```
-   macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
-   Windows: %APPDATA%\Claude\claude_desktop_config.json
-   ```
-
-2. Start the MCP SuperAssistant Proxy server using one of the following commands:
-
-   ```bash
-   npx -y @srbhptl39/mcp-superassistant-proxy@latest --config ./config.json --outputTransport sse
-   ```
-   or 
-   ```bash
-   npx -y @srbhptl39/mcp-superassistant-proxy --config ./config.json --outputTransport streamableHttp
-   ```
-   or
-   ```bash
-   npx -y @srbhptl39/mcp-superassistant-proxy --config ./config.json --outputTransport ws
-   ```
-
-   **View all available options:**
-   ```bash
-   npx -y @srbhptl39/mcp-superassistant-proxy@latest --help
-   ```
-   
-   This is useful for:
-   - Proxying remote MCP servers
-   - Adding CORS support to remote servers
-   - Providing health endpoints for monitoring
-
-#### Connection Steps:
-
-1. Start the proxy server using one of the commands above
-2. Open the MCP SuperAssistant sidebar in one of the supported AI platforms, this should show the sidebar UI
-3. Click on the server status indicator (usually showing as "Disconnected")
-4. Enter the local server URL (default: `http://localhost:3006/sse`)
-   URL format depends on the --outputTransport method used:
-   - For SSE: `http://localhost:3006/sse`
-   - For Streamable HTTP: `http://localhost:3006/mcp`
-   - For WebSocket: `ws://localhost:3006/message`
-   - Choose the appropriate transport method (SSE or Streamable HTTP or WebSocket) 
-   - You can add any remote MCP server URL here as well, if it supports CORS or is proxied via this local proxy server. Try [Composio mcp](https://mcp.composio.dev/), [Zappier mcp](https://zapier.com/mcp), or [smithery](https://smithery.ai/) or any other remote MCP server.
-5. Click "Connect" to establish the connection
-6. The status indicator should change to "Connected" if successful
-
-## Usage
-Example Workflow:
-1. Navigate to a supported AI platform example chatgpt.
-2. The MCP SuperAssistant sidebar will appear on the right side of the page
-3. Configure your MCP Tools to enable and disable the tools you want to use.
-4. In the message prompt area, hover the 'MCP' button to see the available tools and their descriptions.
-5. MCP SuperAssistant requires to add an MCP working instructions prompt to the chat, to give details of its new capabilities and how to use the tools. Use the 'Insert' or attach button to add the instructions prompt. It appears as a small "MCP Instructions" chip in the chat bar and is sent along with your next message.
-6. Once the instructions prompt is added, Now you can ask it to read files or any related MCP tool operations.
-7. When AI wants to use any tool it will show a compact tool call card with the tool name; open it with the chevron to see the parameters.
-8. User can manually execute the tool call by clicking on the "RUN" button on the tool call card, or if Auto-Execute mode is enabled, it will execute automatically.
-9. Automation can be achieved by enabling Auto-Execute and Auto-Submit modes, by clicking on the 'MCP' button and configuring the Auto modes.
-
-
-## Tips & Tricks
-
-1. **Turn off search mode** (chatgpt, perplexity) in AI chat interfaces for better tool call prompt experience and to prevent MCP SuperAssistant from getting derail.
-2. **Turn on Reasoning mode** (chatgpt, perplexity, grok) in AI chat interfaces, which will help the AI to understand the context better and generate the correct tool calls.
-3. Use newer high-end models as they are better at understanding the context and generating the correct tool calls.
-4. Copy the MCP instructions prompt and paste it in the AI chat system prompt (Google AI Studio).
-5. Mention the specific tools you want to use in your conversation.
-6. Use the MCP Auto toggles to control the tool execution.
-
-## Common Issues with MCP SuperAssistant
-
-This page covers the most common issues users encounter with MCP SuperAssistant and provides solutions to resolve them.
-
-### 1. Extension Not Detecting Tool Calls
-
-- Make sure the extension is enabled in your browser.
-- Make sure the **mcp prompt instructions are properly attached or inserted** in the chat, before starting any chat.
-- Check that your AI platform supports tool calls and that the feature is enabled.
-- Refresh the page or restart your browser if the issue persists.
-
-### 2. Tool Execution Fails
-
-- Ensure your proxy server is running and the URL is correct in the sidebar server settings.
-- check your config.json file for any errors or formatting issues.
-- Check your network connectivity and firewall settings.
-
-### 3. Connection Issues
-
-- Ensure that your MCP server is running and accessible.
-- Check the server URL in the extension settings.
-- First start the npx mcp-SuperAssistant-proxy server and then reload/restart the extension from chrome://extensions/ page.
-- Check the proxy server logs for any errors or issues.
-- Ensure that your firewall or antivirus software is not blocking the connection.
-- Make sure the server shows the proper connected status and exposes the `/sse` endpoint.
-
-### 4. Incorrect tool call format 
-
-- There are times model does not generate correct tool call format as requested, this makes the tool detection to fail.
-In such cases, use better models which are meant for tool calling or have better tool calling capabilities.
-- Use the custom instructions prompt, which can be found in the MCP SuperAssistant sidebar.
-- Ask explicitily to use the tools by mentioning them in the prompt.
-- This Below is an example of correct MCP function call format, which is rendered by MCP SuperAssistant extension:
-
-```
-```jsonl
-{"type": "function_call_start", "name": "function_name", "call_id": 1}
-{"type": "description", "text": "Short 1 line of what this function does"}
-{"type": "parameter", "key": "parameter_1", "value": "value_1"}
-{"type": "parameter", "key": "parameter_2", "value": "value_2"}
-{"type": "function_call_end", "call_id": 1}
-```
-```
-
-### Manual Installation (Development)
-
-#### Release Version
-1. Download the latest release from [Releases](https://github.com/srbhptl39/MCP-SuperAssistant/releases)
-2. Unzip the downloaded file
-3. Navigate to `chrome://extensions/` in Chrome
-4. Enable "Developer mode"
-5. Click "Load unpacked" and select the unzipped directory
-6. Follow [Connecting to Local Proxy Server](#connecting-to-local-proxy-server) to connect to your MCP server
-
-## Development
-
-### Prerequisites
-
-- Node.js 22.12+
-- pnpm 9.15.1 (`corepack enable`)
-
-### Setup
+- 安装 Git、Node.js **22.12.0 或更新版本**以及 Chrome。
+- 使用 **pnpm 9.15.1**。如果没有这个版本，可在终端运行以下命令安装。
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Start development server
-pnpm dev
-
-# Build for production
-pnpm build
-
-# Create zip package for distribution
-pnpm zip
-
-# Firefox build and package
-pnpm build:firefox
-pnpm zip:firefox
+npm install --global pnpm@9.15.1
+pnpm --version
 ```
 
-Settings (MCP server, browser access, page capture and usage statistics) live on the extension's options page.
+Windows 用户可直接在 **Git Bash** 里执行下面的构建命令。若使用 PowerShell，先用 `bash --version` 确认终端可以找到 Bash，构建脚本会调用它。
 
-Usage statistics are sent only when `CEB_POSTHOG_KEY` (PostHog) and/or `CEB_GA_MEASUREMENT_ID` + `CEB_GA_API_SECRET` (Google Analytics 4) are set in `.env`, so local builds and forks send nothing by default. Unpacked installs also stay silent unless you run `chrome.storage.local.set({ telemetryDebug: true })` in the service worker console.
+### 2. 获取源码并构建
 
-## Privacy
+```bash
+git clone --branch custom --single-branch https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G.git
+cd MCP-SuperAssistant-G
+pnpm install --frozen-lockfile
+pnpm build
+```
 
-**Usage statistics.** MCP SuperAssistant sends anonymous usage statistics to PostHog (EU region) and/or Google Analytics 4, depending on the release. Each install has a random id that is not linked to you, your accounts or your device. We send: the extension version, browser and operating system; which supported AI site was used; daily counts of feature use (tool runs, auto-execute, browser tools, tab attach, page capture, input chips, sidebar); whether the local MCP proxy connected; and coded error types. We never send chat content, page content, URLs, page titles, tool names, tool arguments or results. PostHog events are sent with IP-based geolocation disabled. You can turn this off in the extension's options under "Usage statistics". Firefox users can also turn it off under Permissions and data in about:addons.
+成功后，项目根目录下的 `dist/` 会包含 `manifest.json`。保留这个目录供 Chrome 加载。
 
-**Remote configuration.** The extension fetches feature flags and notices from Firebase Remote Config, which uses its own random installation id to do so.
+### 3. 加载已解压的扩展
 
-## Contributing
+1. 在 Chrome 地址栏打开 `chrome://extensions/`，打开右上角的 **开发者模式**。
+2. 如果已安装原版或其他同名构建，先停用它们，避免同一个网页有两套扩展脚本运行。
+3. 点击 **加载已解压的扩展程序**，选择刚构建的 **`MCP-SuperAssistant-G/dist`**，也就是直接包含 `manifest.json` 的目录。
+4. 打开 Gemini 或 Google AI Studio 的聊天页面。若标签页之前已经打开，刷新一下，再找输入框附近的 **MCP** 按钮或页面侧栏。
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### 4. 连接 MCP 服务器
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+如果已经有扩展可访问的 MCP 服务地址，直接在侧栏配置相应的连接类型和地址。有本地 `stdio` 工具，或希望把多个服务汇总成一个地址时，可以使用原版 MCP SuperAssistant Proxy。
 
-## Author
+1. 准备自己的 `mcp-config.json`，在 `mcpServers` 中填入工具提供方给出的服务器配置。WebCodex 的地址及凭据使用自己的配置。
+2. 在该配置文件所在目录打开终端，运行下面的命令并保持代理运行。
 
-### [Saurabh Patel](https://github.com/srbhptl39)
+   ```bash
+   npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config ./mcp-config.json --outputTransport sse --port 3006
+   ```
 
-## Sponsor & Support
+3. 打开扩展侧栏的连接设置，连接类型选 **SSE**，**Server URI** 填 `http://localhost:3006/sse`，然后点击 **Connect**。显示 **Connected** 后，到 **Tools** 确认所需工具可见且已启用。
 
-This project is developed entirely in my spare time, driven by a passion for AI and the Model Context Protocol (MCP). As a full-time professional, balancing work commitments with open-source development makes it challenging to contribute regularly and maintain the pace of updates.
+如果需要代理的服务器配置示例或其它传输方式，可参照 [原版代理连接指南](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3#connecting-to-local-proxy-server)。
 
-Your support helps me dedicate more time to:
-- 🐛 Fixing bugs and addressing issues
-- ✨ Adding new features and platform support
-- 📚 Improving documentation and tutorials
-- 🔄 Keeping dependencies up-to-date
-- 💬 Responding to community requests
+### 5. 试跑并更新
 
-**Support this project:**
-- ⭐ Star the repository to show your appreciation
-- 💖 [Sponsor on GitHub](https://github.com/sponsors/srbhptl39) to help sustain development
-- 🐦 Follow me on [Twitter](https://twitter.com/srbhptl39) (@srbhptl39) for updates
-- 📧 For private support or custom implementations, reach out via [Twitter](https://twitter.com/srbhptl39)
+- 在聊天输入框旁打开 **MCP** 菜单，点 **Insert** 加入 MCP Instructions。输入一条只读测试请求，连同指令一起发送。模型生成工具卡片后，可以先手动点 **Run** 验证，再按需开启自动执行、插入和发送。
+- 更新时，在项目目录执行 `git pull --ff-only`、`pnpm install --frozen-lockfile` 和 `pnpm build`。回到 `chrome://extensions/` 点本扩展的 **重新加载**，再刷新已打开的聊天页。遇到 `Extension context is invalid` 时，也应刷新聊天页重新注入扩展脚本。
 
-Every contribution, big or small, helps keep this project alive and thriving! 🙏
+## 许可证
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Inspired by the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) by Anthropic
-- Thanks to [Cline](https://github.com/cline/cline) for idea inspiration
-- Built with [Chrome Extension Boilerplate with React + Vite](https://github.com/Jonghakseo/chrome-extension-boilerplate-react-vite)
-
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=srbhptl39/MCP-SuperAssistant&type=Date)](https://www.star-history.com/#srbhptl39/MCP-SuperAssistant&Date)
+本项目沿用上游的 [MIT 许可证](LICENSE)，保留原版权声明。感谢 [MCP SuperAssistant](https://github.com/srbhptl39/MCP-SuperAssistant) 的作者和贡献者。
