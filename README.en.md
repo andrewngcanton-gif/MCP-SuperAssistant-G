@@ -63,7 +63,7 @@ After the build, the project's `dist/` directory contains `manifest.json`. Keep 
 
 If you already have an MCP endpoint that the extension can reach, enter its transport type and URL in the sidebar. For local `stdio` tools or to expose multiple servers through one endpoint, use the upstream MCP SuperAssistant Proxy.
 
-1. Prepare your own `mcp-config.json` with the server entries supplied by your tools in `mcpServers`. Use your own endpoint and credentials for WebCodex.
+1. Prepare your own `mcp-config.json` with the server entries supplied by your tools in `mcpServers`.
 2. In a terminal in the same directory as that config, run this command and leave the proxy running.
 
    ```bash
@@ -73,6 +73,31 @@ If you already have an MCP endpoint that the extension can reach, enter its tran
 3. Open the extension sidebar's connection settings. Choose **SSE**, enter `http://localhost:3006/sse` as **Server URI**, and click **Connect**. Once it says **Connected**, check the **Tools** tab to see that the tools you need are enabled.
 
 See the [upstream proxy guide](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3#connecting-to-local-proxy-server) for example server configurations and other transports.
+
+#### Connect WebCodex
+
+The extension connects to MCP SuperAssistant Proxy over SSE. The proxy connects to WebCodex's `/mcp` endpoint using Streamable HTTP. This example uses a local WebCodex **0.5.0** installation.
+
+1. Start the WebCodex server and Runner, confirm that the Runner is connected, and configure the projects you want to access in WebCodex.
+2. Merge this `webcodex` entry into `mcpServers` in the proxy's `mcp-config.json`. Use the endpoint and header values supplied by your WebCodex installation. `60143` is an example port. Keep your bearer token in the local config file.
+
+   ```json
+   {
+     "mcpServers": {
+       "webcodex": {
+         "type": "streamable-http",
+         "url": "http://127.0.0.1:60143/mcp",
+         "headers": {
+           "X-WebCodex-MCP-Surface": "<value from WebCodex>",
+           "Authorization": "Bearer <your WebCodex token>"
+         }
+       }
+     }
+   }
+   ```
+
+3. Start or restart the proxy using the command above. In the extension sidebar, select **SSE** and connect to `http://localhost:3006/sse`. Check that the WebCodex tools are listed and enabled under **Tools**.
+4. Insert and send the updated **MCP Instructions** in the chat. To verify the connection, ask the model to list projects with `list_projects` or open a known project with `work_on_project`.
 
 ### 5. Test and update
 

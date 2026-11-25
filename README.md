@@ -63,7 +63,7 @@ pnpm build
 
 如果已经有扩展可访问的 MCP 服务地址，直接在侧栏配置相应的连接类型和地址。有本地 `stdio` 工具，或希望把多个服务汇总成一个地址时，可以使用原版 MCP SuperAssistant Proxy。
 
-1. 准备自己的 `mcp-config.json`，在 `mcpServers` 中填入工具提供方给出的服务器配置。WebCodex 的地址及凭据使用自己的配置。
+1. 准备自己的 `mcp-config.json`，在 `mcpServers` 中填入工具提供方给出的服务器配置。
 2. 在该配置文件所在目录打开终端，运行下面的命令并保持代理运行。
 
    ```bash
@@ -73,6 +73,31 @@ pnpm build
 3. 打开扩展侧栏的连接设置，连接类型选 **SSE**，**Server URI** 填 `http://localhost:3006/sse`，然后点击 **Connect**。显示 **Connected** 后，到 **Tools** 确认所需工具可见且已启用。
 
 如果需要代理的服务器配置示例或其它传输方式，可参照 [原版代理连接指南](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3#connecting-to-local-proxy-server)。
+
+#### 与 WebCodex 配合使用
+
+扩展连接 MCP SuperAssistant Proxy 的 SSE 地址，代理再通过 Streamable HTTP 连接 WebCodex 的 `/mcp`。以下配置以本地 WebCodex **0.5.0** 为例。
+
+1. 启动 WebCodex 服务和 Runner，确认 Runner 已连接，并在 WebCodex 中配置要访问的项目。
+2. 将下面的 `webcodex` 条目合并到代理 `mcp-config.json` 的 `mcpServers` 中。把端点和请求头的值换成 WebCodex 提供的配置。`60143` 是示例端口，Bearer token 只保存在本地配置文件里。
+
+   ```json
+   {
+     "mcpServers": {
+       "webcodex": {
+         "type": "streamable-http",
+         "url": "http://127.0.0.1:60143/mcp",
+         "headers": {
+           "X-WebCodex-MCP-Surface": "<WebCodex 提供的值>",
+           "Authorization": "Bearer <你的 WebCodex token>"
+         }
+       }
+     }
+   }
+   ```
+
+3. 用上面的命令启动或重启代理，在扩展侧栏选择 **SSE** 并连接 `http://localhost:3006/sse`。到 **Tools** 确认 WebCodex 工具已出现并启用。
+4. 在聊天里插入并发送更新后的 **MCP Instructions**，再请模型用 `list_projects` 列出项目，或用 `work_on_project` 打开一个已知项目，验证连接。
 
 ### 5. 试跑并更新
 
