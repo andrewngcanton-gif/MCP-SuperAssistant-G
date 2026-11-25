@@ -97,6 +97,8 @@ See the [upstream proxy guide](https://github.com/srbhptl39/MCP-SuperAssistant/t
 
 The extension connects to MCP SuperAssistant Proxy over SSE. The proxy connects to WebCodex's `/mcp` endpoint using Streamable HTTP. This example uses a local WebCodex **0.5.0** installation.
 
+[WebCodex project](https://github.com/yyjeqhc/webcodex) · [Download WebCodex v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0)
+
 1. Start the WebCodex server and Runner, confirm that the Runner is connected, and configure the projects you want to access in WebCodex.
 2. Merge this `webcodex` entry into `mcpServers` in the proxy's `mcp-config.json`. This WebCodex 0.5.0 connection uses `X-WebCodex-MCP-Surface: cli`. Use a user token for the same WebCodex server in `Authorization`. On Windows, the script below can read it from a signed-in Desktop connection. Adjust the example port `60143` to match your server.
 

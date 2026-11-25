@@ -97,6 +97,8 @@ pnpm build
 
 扩展连接 MCP SuperAssistant Proxy 的 SSE 地址，代理再通过 Streamable HTTP 连接 WebCodex 的 `/mcp`。以下配置以本地 WebCodex **0.5.0** 为例。
 
+[WebCodex 项目](https://github.com/yyjeqhc/webcodex) · [下载 WebCodex v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0)
+
 1. 启动 WebCodex 服务和 Runner，确认 Runner 已连接，并在 WebCodex 中配置要访问的项目。
 2. 将下面的 `webcodex` 条目合并到代理 `mcp-config.json` 的 `mcpServers` 中。WebCodex 0.5.0 的这个连接方式使用 `X-WebCodex-MCP-Surface: cli`。`Authorization` 使用同一 WebCodex 服务的用户 token，Windows 可按下方脚本从桌面版的已登录连接读取。按实际情况调整示例端口 `60143`。
 
