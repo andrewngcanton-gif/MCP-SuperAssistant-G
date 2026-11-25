@@ -1193,11 +1193,16 @@ const AutoExecutionUtils = {
             return;
           }
 
-          const finalCheckExecuted = getPreviousExecution(
-            functionDetails.functionName,
-            functionDetails.callId,
-            functionDetails.contentSignature,
-          );
+          // On AI Studio, turn provenance + logical invocation claims govern replay/dedupe per
+          // turn; URL-keyed localStorage history breaks shared /prompts/new_chat and repeated
+          // calls across later turns in the same conversation.
+          const finalCheckExecuted = isAistudioHost()
+            ? null
+            : getPreviousExecution(
+                functionDetails.functionName,
+                functionDetails.callId,
+                functionDetails.contentSignature,
+              );
           if (finalCheckExecuted) {
             logger.debug(`Auto-execute: Function already executed, skipping.`);
             executionTracker.cleanupBlock(blockId);
@@ -1268,11 +1273,13 @@ const AutoExecutionUtils = {
       const callId = block.querySelector('.call-id')?.textContent?.trim();
 
       if (name === functionDetails.functionName && callId === functionDetails.callId) {
-        const alreadyExecuted = getPreviousExecution(
-          functionDetails.functionName,
-          functionDetails.callId,
-          functionDetails.contentSignature,
-        );
+        const alreadyExecuted = isAistudioHost()
+          ? null
+          : getPreviousExecution(
+              functionDetails.functionName,
+              functionDetails.callId,
+              functionDetails.contentSignature,
+            );
 
         if (!alreadyExecuted) {
           logger.debug(`Auto-execute: Found replacement block, attempting execution.`);
@@ -1509,7 +1516,14 @@ const renderCard = (
       const isMeta = isMetaTool(functionName);
       const autoDiscovery = automationState.autoDiscovery;
       const provenance = getAistudioProvenance(block);
-      if (contentSignature && !executionTracker.isFunctionExecuted(callId, contentSignature, functionName)) {
+      // On AI Studio, turn provenance + claimAistudioAutomaticInvocation already dedupe each
+      // logical (userTurnId, modelTurnId, callId); URL-keyed history must not block new turns
+      // on shared /prompts/new_chat or later turns reusing call_id=1.
+      const alreadyExec =
+        !isAistudioHost() && contentSignature
+          ? executionTracker.isFunctionExecuted(callId, contentSignature, functionName)
+          : false;
+      if (contentSignature && !alreadyExec) {
         if (isInUserMessage(block) || (autoExecuteEnabled !== true && !(isMeta && autoDiscovery))) {
           return;
         }
@@ -1929,7 +1943,14 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
       const isMeta = isMetaTool(functionName);
       const autoDiscovery = automationState.autoDiscovery;
       const provenance = getAistudioProvenance(block);
-      if (contentSignature && !executionTracker.isFunctionExecuted(callId, contentSignature, functionName)) {
+      // On AI Studio, turn provenance + claimAistudioAutomaticInvocation already dedupe each
+      // logical (userTurnId, modelTurnId, callId); URL-keyed history must not block new turns
+      // on shared /prompts/new_chat or later turns reusing call_id=1.
+      const alreadyExec =
+        !isAistudioHost() && contentSignature
+          ? executionTracker.isFunctionExecuted(callId, contentSignature, functionName)
+          : false;
+      if (contentSignature && !alreadyExec) {
         if (isInUserMessage(block) || (autoExecuteEnabled !== true && !(isMeta && autoDiscovery))) {
           logger.debug(`Auto-execution disabled by user settings for block ${blockId} (${functionName})`);
           return true;

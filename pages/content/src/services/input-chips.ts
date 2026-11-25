@@ -1,5 +1,6 @@
 import type { AdapterPlugin, ChipAnchors } from '../plugins/plugin-types';
 import { createLogger } from '@extension/shared/lib/logger';
+import { cancelAistudioSubmission } from '../render_prescript/src/provenance/aistudioTurnGate';
 import { useToolStore } from '../stores/tool.store';
 import { generateBrowserPrimer } from '../components/sidebar/Instructions/instructionGeneratorCompact';
 import { telemetry } from '../utils/telemetry';
@@ -229,15 +230,17 @@ const OVERLAY_STYLES = `
  * Pure decision for the Enter interception. Kept as a standalone export so cell/unit tests can
  * cover the conditions without pretending jsdom can synthesize a trusted user key event.
  * Only a plain Enter inside the composer submits; Shift+Enter, modifier chords and IME
- * composition keep their native behaviour.
+ * composition keep their native behaviour. AI Studio also sends on Ctrl+Enter, so its caller may
+ * opt in to that one chord; every other host keeps the plain-Enter rule.
  */
 export function isChipSubmitEnter(
-  event: Pick<KeyboardEvent, 'isTrusted' | 'key' | 'shiftKey' | 'ctrlKey' | 'metaKey' | 'altKey' | 'isComposing' | 'keyCode'>,
+  event: Pick<KeyboardEvent, 'isTrusted' | 'key' | 'ctrlKey' | 'shiftKey' | 'metaKey' | 'altKey' | 'isComposing' | 'keyCode'>,
+  options?: { allowCtrl?: boolean },
 ): boolean {
   return event.isTrusted
     && event.key === 'Enter'
+    && (options?.allowCtrl === true || !event.ctrlKey)
     && !event.shiftKey
-    && !event.ctrlKey
     && !event.metaKey
     && !event.altKey
     && !event.isComposing
@@ -311,7 +314,7 @@ class InputChipManager {
     }
 
     if (!this.chips.length) {
-      this.removeListeners();
+      if (!this.sending) this.removeListeners();
       this.stopWatchdog();
       this.removeUI();
     }
@@ -693,11 +696,18 @@ class InputChipManager {
   // --- submit interception (user-initiated) -----------------------------
 
   private onKeydown = (e: KeyboardEvent): void => {
-    if (!isChipSubmitEnter(e) || !this.adapter) return;
+    // AI Studio sends on Ctrl+Enter by default (button.ctrl-enter-submits) or plain Enter when
+    // configured for Enter-to-submit. Only AI Studio may consume the Ctrl+Enter chord.
+    const isAistudio = this.adapter?.name === 'AIStudioAdapter';
+    if (!isChipSubmitEnter(e, { allowCtrl: isAistudio }) || !this.adapter) return;
     const anchors = this.adapter.getChipAnchors?.();
     if (!anchors) return;
     const target = e.target as Node | null;
     if (!target || !anchors.input.contains(target)) return;
+    // In AI Studio's default Ctrl+Enter mode, plain Enter inserts a newline; leave it native.
+    if (isAistudio && !e.ctrlKey && anchors.container.querySelector('ms-run-button button.ctrl-enter-submits, button.ctrl-enter-submits')) {
+      return;
+    }
     // A merge/submit already owns this gesture: swallow a second Enter so the page cannot send
     // the draft a second time while the chip payload is being merged.
     if (this.flushing || this.sending) {
@@ -737,7 +747,8 @@ class InputChipManager {
       return;
     }
 
-    if (!this.chips.length || this.flushing || this.sending) return;
+    const isAistudio = this.adapter.name === 'AIStudioAdapter';
+    if (!isAistudio && (!this.chips.length || this.flushing || this.sending)) return;
     const anchors = this.adapter.getChipAnchors?.();
     if (!anchors || !anchors.submitButtonSelector) return;
     const target = e.target as Element | null;
@@ -745,6 +756,15 @@ class InputChipManager {
     // Only intercept the composer's own send control; leave unrelated page buttons to their
     // native behaviour. Gemini is handled above with adapter-scoped recognition.
     if (!control) return;
+    // AI Studio: the run control must belong to the captured composer. A click in a competing
+    // composer is left to the page and never flushes this composer's pending chips.
+    if (isAistudio && !anchors.container.contains(control)) return;
+    if (isAistudio && (this.flushing || this.sending)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+    if (!this.chips.length) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     void this.submitWithPendingChips(this.adapter);
@@ -764,6 +784,9 @@ class InputChipManager {
     } : undefined;
     const pending = this.chips.slice();
     this.sending = true;
+    // This trusted gesture is consumed before the page's turn gate sees it. Retire the old
+    // cycle now, then let the adapter capture the complete draft at actual dispatch.
+    if (adapter.name === 'AIStudioAdapter') cancelAistudioSubmission();
     try {
       const sent = await adapter.submitForm(options);
       if (!sent && sameConversation()) this.restoreChipsIfPayloadLost(pending);
@@ -773,15 +796,18 @@ class InputChipManager {
     } finally {
       this.sending = false;
       if (this.chips.length) this.renderBar();
+      else this.removeListeners();
     }
   }
 
   private ensureListeners(): void {
     if (this.listenersAttached) return;
-    // Gemini binds Enter/click on the composer itself and can dispatch the user's turn before a
-    // document-capture listener runs. Window capture is the earliest extension hook, so the chip
-    // payload is merged before Gemini reads the draft. Other hosts keep the legacy document hook.
-    const host: Window | Document = this.adapter?.name === 'GeminiAdapter' ? window : document;
+    // Gemini and AI Studio bind Enter/click on the composer themselves and can dispatch the
+    // user's turn before a document-capture listener runs. Window capture is the earliest
+    // extension hook, so the chip payload is merged before the page (or the AI Studio gate's
+    // document listener) reads the draft. Other hosts keep the legacy document hook.
+    const useWindowCapture = this.adapter?.name === 'GeminiAdapter' || this.adapter?.name === 'AIStudioAdapter';
+    const host: Window | Document = useWindowCapture ? window : document;
     host.addEventListener('keydown', this.onKeydown as EventListener, true);
     host.addEventListener('click', this.onClick as EventListener, true);
     this.listenerHost = host;

@@ -11,6 +11,8 @@ import { inputChips } from '../../services/input-chips';
 import {
   abortExtensionSubmission,
   beginExtensionSubmission,
+  findAistudioSendButton,
+  isAistudioSendButtonEnabled,
 } from '../../render_prescript/src/provenance/aistudioTurnGate';
 
 /**
@@ -1711,11 +1713,17 @@ export const insertTextToChatInput = (text: string): boolean => {
     const chatInput = findChatInputElement();
 
     if (chatInput) {
-      // Append the text to the existing text in the textarea
+      // Append the text to the existing text in the textarea without doubling leading newlines
       const currentText = chatInput.value;
-      // Add new line before and after the current text if there's existing content
-      const formattedText = currentText ? `${currentText}\n\n${text}` : text;
-      chatInput.value = formattedText;
+      const formattedText = currentText
+        ? (text.startsWith('\n') ? `${currentText}${text}` : `${currentText}\n\n${text}`)
+        : text;
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+      if (valueSetter) {
+        valueSetter.call(chatInput, formattedText);
+      } else {
+        chatInput.value = formattedText;
+      }
 
       // The extension may have captured the result as a chip while the textarea was still empty.
       // Report this physical write so automation can adopt only the payload it just inserted, and
@@ -1731,9 +1739,14 @@ export const insertTextToChatInput = (text: string): boolean => {
         }),
       );
 
-      // Trigger input event to make AiStudio recognize the change
-      const inputEvent = new Event('input', { bubbles: true });
+      // Trigger input + change events so Angular / CdkTextareaAutosize updates form state and
+      // clears aria-disabled="true" on ms-run-button.
+      const inputEvent =
+        typeof InputEvent !== 'undefined'
+          ? new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text })
+          : new Event('input', { bubbles: true });
       chatInput.dispatchEvent(inputEvent);
+      chatInput.dispatchEvent(new Event('change', { bubbles: true }));
 
       // Focus the textarea
       chatInput.focus();
@@ -1906,23 +1919,8 @@ export const submitChatInput = (
         return;
       }
 
-      // Define a function to find the submit button
-      const findSubmitButton = (): HTMLButtonElement | null => {
-        const submitButton =
-          document.querySelector('ms-run-button button') || // Nov 2026: "Run" button, no aria-label
-          document.querySelector('button[aria-label="Submit"]') ||
-          document.querySelector('button[aria-label="Send"]') ||
-          document.querySelector('button[type="submit"]') ||
-          // Look for a button next to the textarea
-          chatInput.parentElement?.querySelector('button') ||
-          // Common pattern: button with paper plane icon
-          document.querySelector('button svg[stroke="currentColor"]')?.closest('button');
-
-        return submitButton as HTMLButtonElement | null;
-      };
-
       // Try to find and check the submit button
-      const submitButton = findSubmitButton();
+      const submitButton = findAistudioSendButton(chatInput);
 
       if (submitButton) {
         logger.debug(`Found submit button (${submitButton.getAttribute('aria-label') || 'unknown'})`);
@@ -1935,21 +1933,15 @@ export const submitChatInput = (
             resolve(false);
             return 'failed';
           }
-          const button = findSubmitButton();
+          const button = findAistudioSendButton(chatInput);
           if (!button) {
+            if (deferWhenBusy) return 'waiting';
             logger.debug('Submit button no longer found');
             resolve(false);
             return 'failed';
           }
 
-          // Check if the button is disabled
-          const isDisabled =
-            button.disabled ||
-            button.getAttribute('disabled') !== null ||
-            button.getAttribute('aria-disabled') === 'true' ||
-            button.classList.contains('disabled');
-
-          if (!isDisabled) {
+          if (isAistudioSendButtonEnabled(button)) {
             if (canProceed && !canProceed()) {
               logger.debug('Submission context changed immediately before AI Studio click');
               resolve(false);
@@ -2070,6 +2062,11 @@ export const submitChatInput = (
           clearInterval(intervalId);
         }
       } else {
+        if (deferWhenBusy) {
+          onBusy?.();
+          resolve(false);
+          return;
+        }
         // If no button found, proceed with alternative methods immediately
         logger.debug('No submit button found, trying alternative methods');
 

@@ -6,6 +6,7 @@
 
 // Define the interface for stored function execution data
 import { createLogger } from '@extension/shared/lib/logger';
+import { isAistudioNewChatUrl } from '../provenance/aistudioTurnGate';
 
 const logger = createLogger('STORAGE_KEY');
 
@@ -93,6 +94,13 @@ export const storeExecutedFunction = (
   // Dedupe still works (key is name:callId:signature); only re-execute loses its args.
   if (JSON.stringify(executionRecord).length > CLEANUP.MAX_ENTRY_BYTES) {
     executionRecord = { ...executionRecord, params: {}, paramsOmitted: true };
+  }
+
+  // AI Studio keeps the shared /prompts/new_chat URL until after the first turn completes.
+  // Persisting executions under that shared URL would falsely mark identical first-turn calls
+  // (such as get_tool_schema) as already executed in every subsequent new conversation.
+  if (isAistudioNewChatUrl(url)) {
+    return executionRecord;
   }
 
   // Create a unique key for this function execution
@@ -291,6 +299,7 @@ export const getExecutedFunctions = (): (ExecutedFunction & { url: string })[] =
  */
 export const getExecutedFunctionsForCurrentUrl = (): ExecutedFunction[] => {
   const currentUrl = window.location.href;
+  if (isAistudioNewChatUrl(currentUrl)) return [];
   const storage = getURLBasedStorage();
 
   // Direct access to current URL's functions
@@ -332,6 +341,7 @@ export const getPreviousExecution = (
   contentSignature: string,
 ): ExecutedFunction | null => {
   const currentUrl = window.location.href;
+  if (isAistudioNewChatUrl(currentUrl)) return null;
   const storage = getURLBasedStorage();
 
   // Check if URL exists in storage
@@ -355,6 +365,7 @@ export const getPreviousExecution = (
  */
 export const getPreviousExecutionLegacy = (callId: string, contentSignature: string): ExecutedFunction | null => {
   const currentUrl = window.location.href;
+  if (isAistudioNewChatUrl(currentUrl)) return null;
   const storage = getURLBasedStorage();
 
   // Check if URL exists in storage

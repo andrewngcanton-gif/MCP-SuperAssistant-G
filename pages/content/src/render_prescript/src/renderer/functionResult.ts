@@ -1,4 +1,5 @@
 import { CONFIG } from '../core/config';
+import { rememberAistudioRenderedChunk } from '../provenance/aistudioTurnGate';
 import { applyThemeClass, isDarkTheme } from '../utils/themeDetector';
 import { createLogger } from '@extension/shared/lib/logger';
 
@@ -188,6 +189,7 @@ const createThemedContainer = (className: string, blockId: string): HTMLDivEleme
  * Replaces the content of a block with new content
  */
 const replaceBlockContent = (block: HTMLElement, newContent: HTMLElement): void => {
+  rememberAistudioRenderedChunk(block, newContent);
   while (block.firstChild) {
     block.removeChild(block.firstChild);
   }

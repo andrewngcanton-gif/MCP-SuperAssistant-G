@@ -41,16 +41,45 @@ const REGENERATE_CONTROL_SELECTOR = [
   'button[aria-label*="重新生成" i]',
 ].join(', ');
 
+const getComposerRoot = (element: HTMLElement): HTMLElement | null =>
+  element.closest<HTMLElement>('.prompt-box-container')
+  ?? element.closest<HTMLElement>('ms-prompt-box')
+  ?? element.closest<HTMLElement>(COMPOSER_SELECTOR)
+  ?? element.closest<HTMLElement>('footer');
+
+const PRIMARY_EDITOR_SELECTORS = [
+  'textarea.textarea[placeholder^="Start typing a prompt"]',
+  'textarea.textarea[aria-label="Enter a prompt"]',
+  '.prompt-box-container textarea.textarea',
+];
+
 const USER_ROLES = new Set(['user', 'human']);
 const MODEL_ROLES = new Set(['model', 'assistant', 'bot']);
 // A first-send transition is only the new-chat route becoming a named chat. Named -> named and
 // any unrelated URL change must invalidate the old cycle before old DOM is unmounted.
-const NEW_CHAT_ROUTES = new Set(['/', '/app', '/app/', '/app/prompts/new', '/app/prompts/new_chat', '/app/prompts/new-chat', '/prompts/new', '/prompts/new_chat', '/prompts/new-chat']);
-const isNamedChatRoute = (path: string): boolean =>
-  /^\/(?:app\/)?prompts\/[^/]+$/.test(path) && !NEW_CHAT_ROUTES.has(path);
-// Bounds an armed-but-never-submitted cycle. This is not positive evidence; it only prevents a
-// session from staying armed indefinitely when no matching user turn ever appears.
-const BIND_TIMEOUT_MS = 15000;
+const NEW_CHAT_ROUTES = new Set(['/', '/app', '/app/prompts/new', '/app/prompts/new_chat', '/app/prompts/new-chat', '/prompts/new', '/prompts/new_chat', '/prompts/new-chat']);
+const normalizeRoutePath = (path: string): string => {
+  const stripped = path.replace(/^\/u\/\d+(?=\/)/, '').replace(/\/+$/, '');
+  return stripped || '/';
+};
+const isNamedChatRoute = (path: string): boolean => {
+  const normalized = normalizeRoutePath(path);
+  return /^\/(?:app\/)?prompts\/[^/]+$/.test(normalized) && !NEW_CHAT_ROUTES.has(normalized);
+};
+/** Shared AI Studio new-chat routes are reused across unrelated conversations; never key history by them. */
+export const isAistudioNewChatUrl = (url?: string): boolean => {
+  if (!isAistudioHost()) return false;
+  try {
+    const pathname = url ? new URL(url, location.origin).pathname : location.pathname;
+    return NEW_CHAT_ROUTES.has(normalizeRoutePath(pathname));
+  } catch {
+    return false;
+  }
+};
+// Bounds an armed-but-never-submitted cycle before the user turn even renders. Once the user turn
+// is bound (which happens eagerly as soon as it mounts), this timeout no longer applies, so long
+// model thinking phases never expire an active cycle.
+const BIND_TIMEOUT_MS = 30000;
 
 export interface AistudioProvenance {
   v: 1;
@@ -75,9 +104,11 @@ interface SubmissionCycle {
   conversationAliases: Set<string>;
   /** Transient, page-local evidence of what was actually submitted. Never persisted. */
   submittedDraft: string | null;
+  renderedChunks: WeakMap<HTMLElement, { replacement: HTMLElement; text: string }>;
   submittedComposer: HTMLElement | null;
   expiresAt: number;
   firstSendMigrated: boolean;
+  pendingNamedConversation?: string;
   baselineTurnIds: Set<string>;
   baselineUserTurnIds: Set<string>;
   baselineTail: HTMLElement | null;
@@ -104,6 +135,7 @@ let initialized = false;
 let cycle: SubmissionCycle | null = null;
 let nextEpoch = 1;
 let urlPollTimer: number | null = null;
+let bindObserver: MutationObserver | null = null;
 
 /**
  * One actual tool invocation started from a card (automatic or deliberate manual Run).
@@ -165,41 +197,132 @@ const currentConversation = (): string =>
 const allTurns = (): HTMLElement[] =>
   Array.from(document.querySelectorAll<HTMLElement>(TURN_SELECTOR));
 
+const readEditorDraft = (editor: HTMLElement): string =>
+  (
+    editor.tagName === 'TEXTAREA' || editor.tagName === 'INPUT'
+      ? (editor as HTMLTextAreaElement).value
+      : (editor.textContent ?? '')
+  ).trim();
+
 /** Draft text actually present in the AI Studio composer at submission time, plus its editor. */
 const findComposerEditor = (): HTMLElement | null => {
+  for (const selector of PRIMARY_EDITOR_SELECTORS) {
+    const editor = document.querySelector<HTMLElement>(selector);
+    if (editor && !editor.closest('#mcp-button-wrapper, #mcp-popover-container')) return editor;
+  }
   for (const editor of Array.from(document.querySelectorAll<HTMLElement>('textarea, [contenteditable="true"]'))) {
     if (editor.closest('#mcp-button-wrapper, #mcp-popover-container')) continue;
-    if (!editor.closest(COMPOSER_SELECTOR)) continue;
+    if (!getComposerRoot(editor)) continue;
     return editor;
   }
   return null;
 };
 
 const readSubmittedComposer = (): { draft: string; element: HTMLElement } | null => {
+  const primary = findComposerEditor();
+  if (primary) {
+    const draft = readEditorDraft(primary);
+    if (draft) return { draft, element: primary };
+  }
   for (const editor of Array.from(document.querySelectorAll<HTMLElement>('textarea, [contenteditable="true"]'))) {
+    if (editor === primary) continue;
     if (editor.closest('#mcp-button-wrapper, #mcp-popover-container')) continue;
-    if (!editor.closest(COMPOSER_SELECTOR)) continue;
-    const draft = (
-      editor.tagName === 'TEXTAREA' || editor.tagName === 'INPUT'
-        ? (editor as HTMLTextAreaElement).value
-        : (editor.textContent ?? '')
-    ).trim();
+    if (!getComposerRoot(editor)) continue;
+    const draft = readEditorDraft(editor);
     if (draft) return { draft, element: editor };
   }
   return null;
 };
 
 const normalizeDraftText = (text: string): string => text.replace(/\r\n?/g, '\n').trim();
+const collapseWhitespace = (text: string): string => text.replace(/\s+/g, ' ').trim();
+
+/** Result cards can replace the page's text before the new user turn is bound. */
+export const rememberAistudioRenderedChunk = (chunk: HTMLElement, replacement: HTMLElement): void => {
+  if (!cycle?.submittedDraft || cycle.submittedUserTurnId || !chunk.matches('ms-text-chunk')) return;
+  if (!isUserTurn(chunk.closest<HTMLElement>(TURN_SELECTOR))) return;
+  cycle.renderedChunks.set(chunk, { replacement, text: chunk.textContent ?? '' });
+  // Bind the user turn eagerly once replaceBlockContent finishes attaching the replacement,
+  // before a long model thinking phase can hit BIND_TIMEOUT_MS.
+  queueMicrotask(() => {
+    if (cycle && !cycle.submittedUserTurnId) refreshSubmissionCycle();
+  });
+};
+
+const extractDistinctiveSegments = (text: string): string[] =>
+  normalizeDraftText(text)
+    .split('\n')
+    .map(line => collapseWhitespace(line))
+    .filter(
+      line =>
+        line.length >= 4 &&
+        line !== '---' &&
+        !/^```/.test(line) &&
+        !/^<\/?(?:system|function_result|custom_instructions)\b[^>]*>$/i.test(line),
+    );
 
 /** Strong per-send evidence: the new user turn must carry the text that was in the composer. */
 const draftMatchesTurn = (draft: string | null, turn: HTMLElement | null): boolean => {
   if (!draft || !turn) return false;
   const submitted = normalizeDraftText(draft);
-  const textChunks = Array.from(turn.querySelectorAll('ms-text-chunk'));
+  if (!submitted) return false;
+  const textChunks = Array.from(turn.querySelectorAll<HTMLElement>('ms-text-chunk'));
   const rendered = textChunks.length
-    ? textChunks.map(chunk => chunk.textContent ?? '').join('\n')
+    ? textChunks.map(chunk => {
+      const original = cycle?.renderedChunks.get(chunk);
+      if (original && chunk.contains(original.replacement)) {
+        return original.text;
+      }
+      return chunk.textContent ?? '';
+    }).join('\n')
     : turn.textContent ?? '';
-  return !!submitted && normalizeDraftText(rendered) === submitted;
+  const renderedNorm = normalizeDraftText(rendered);
+  if (!renderedNorm) return false;
+  if (renderedNorm === submitted) return true;
+
+  // Tolerate blank-line / indentation normalization (e.g. \n\n\n\n vs \n\n or Angular wrappers).
+  const submittedCollapsed = collapseWhitespace(submitted);
+  const renderedCollapsed = collapseWhitespace(renderedNorm);
+  if (renderedCollapsed === submittedCollapsed) return true;
+
+  // AI Studio can render Markdown rules (--- -> <hr>) or fenced code blocks inside user turns
+  // with UI chrome (language header / copy button). Verify positive content anchors so real
+  // formatted submissions still match while unrelated or historical turns fail closed.
+  const strippedSubmitted = collapseWhitespace(submitted.replace(/(?:^|\n)---(?=\n|$)/g, '\n'));
+  if (strippedSubmitted && renderedCollapsed === strippedSubmitted) return true;
+
+  const sysIdx = submitted.search(/\[SuperAssistant tools|<system>/i);
+  const sepIdx = sysIdx < 0 ? submitted.indexOf('\n---\n') : submitted.lastIndexOf('\n---\n', sysIdx);
+  if (sepIdx > 0) {
+    const userLead = collapseWhitespace(submitted.slice(0, sepIdx));
+    const tailSegments = extractDistinctiveSegments(submitted.slice(sepIdx + 5));
+    if (
+      userLead &&
+      renderedCollapsed.includes(userLead) &&
+      tailSegments.length > 0 &&
+      renderedCollapsed.includes(tailSegments[0]) &&
+      renderedCollapsed.includes(tailSegments[tailSegments.length - 1])
+    ) {
+      return true;
+    }
+  }
+
+  const resultMatch = submitted.match(/<function_result\b[^>]*call_id="([^"]+)"[^>]*>([\s\S]*?)<\/function_result>/i);
+  if (resultMatch) {
+    const callId = resultMatch[1].trim();
+    const innerSegments = extractDistinctiveSegments(resultMatch[2]);
+    const hasCallId = !callId || renderedCollapsed.includes(callId) || turn.querySelector('.call-id')?.textContent?.trim() === callId;
+    if (
+      hasCallId &&
+      innerSegments.length > 0 &&
+      renderedCollapsed.includes(innerSegments[0]) &&
+      renderedCollapsed.includes(innerSegments[innerSegments.length - 1])
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 const turnRole = (turn: Element | null): string =>
@@ -285,19 +408,20 @@ const pathFromConversation = (conversation: string): string => {
   }
 };
 
-const migrateOrCancelOnNavigation = (): void => {
+const migrateOrCancelOnNavigation = (): boolean => {
   const activeCycle = cycle;
-  if (!activeCycle) return;
+  if (!activeCycle) return false;
   const current = currentConversation();
-  if (current === activeCycle.conversation) return;
+  if (current === activeCycle.conversation && !activeCycle.pendingNamedConversation) return true;
 
   // Only the real first-send route (new chat -> its assigned named chat) may migrate, once, and
   // only with the same submitted user turn. Every other URL change invalidates the old effects,
   // including named -> named navigation while the old DOM is still attached.
-  const previousPath = pathFromConversation(activeCycle.conversation);
-  const nextPath = isBrowser() ? location.pathname : '';
+  const previousPath = normalizeRoutePath(pathFromConversation(activeCycle.conversation));
+  const nextPath = normalizeRoutePath(isBrowser() ? location.pathname : '');
   const isVerifiableFirstSend =
     !activeCycle.firstSendMigrated &&
+    (!activeCycle.pendingNamedConversation || activeCycle.pendingNamedConversation === current) &&
     NEW_CHAT_ROUTES.has(previousPath) &&
     isNamedChatRoute(nextPath);
 
@@ -319,22 +443,54 @@ const migrateOrCancelOnNavigation = (): void => {
     activeCycle.conversation = current;
     activeCycle.conversationAliases.add(current);
     activeCycle.firstSendMigrated = true;
+    activeCycle.pendingNamedConversation = undefined;
     for (const record of invocationRecords.values()) {
       record.conversationAliases.add(activeCycle.conversation);
       record.conversationAliases.add(current);
     }
     logger.debug(`AI Studio submission cycle moved with first-send URL transition to ${current}`);
+    return true;
+  } else if (isVerifiableFirstSend && !activeCycle.submittedUserTurnId && Date.now() <= activeCycle.expiresAt) {
+    // The URL can change before the page renders the submitted user turn. Allow one pending
+    // destination to wait for the existing exact draft and stable ID checks.
+    activeCycle.pendingNamedConversation = current;
   } else {
     logger.debug('AI Studio navigation invalidated the submission cycle');
+    stopBindObserver();
     cycle = null;
     clearInvocationRecords();
   }
+  return false;
+};
+
+const stopBindObserver = (): void => {
+  if (bindObserver) {
+    bindObserver.disconnect();
+    bindObserver = null;
+  }
+};
+
+/** Eagerly bind the new user turn as soon as AI Studio mounts it, before thinking exceeds BIND_TIMEOUT_MS. */
+const ensureBindObserver = (): void => {
+  if (!isBrowser() || typeof MutationObserver === 'undefined' || !document.body) return;
+  if (!cycle || cycle.submittedUserTurnId) {
+    stopBindObserver();
+    return;
+  }
+  if (bindObserver) return;
+  bindObserver = new MutationObserver(() => {
+    if (!cycle || cycle.submittedUserTurnId) {
+      stopBindObserver();
+      return;
+    }
+    refreshSubmissionCycle();
+    if (!cycle || cycle.submittedUserTurnId) stopBindObserver();
+  });
+  bindObserver.observe(document.body, { childList: true, subtree: true });
 };
 
 const refreshSubmissionCycle = (): void => {
-  if (!cycle) return;
-  migrateOrCancelOnNavigation();
-  if (!cycle) return;
+  if (!migrateOrCancelOnNavigation() || !cycle) return;
 
   trackSeenTurns();
 
@@ -343,6 +499,7 @@ const refreshSubmissionCycle = (): void => {
       // An unbound cycle must not stay armed forever.
       if (Date.now() > cycle.expiresAt) {
         logger.debug(`AI Studio submission cycle ${cycle.epoch} expired before a matching user turn`);
+        stopBindObserver();
         cycle = null;
         return;
       }
@@ -363,6 +520,7 @@ const refreshSubmissionCycle = (): void => {
       });
       if (matchingUserTurns.length > 1) {
         logger.debug(`AI Studio submission cycle ${cycle.epoch} has ambiguous submitted user turns; failing closed`);
+        stopBindObserver();
         cycle = null;
         return;
       }
@@ -371,6 +529,7 @@ const refreshSubmissionCycle = (): void => {
       if (id) {
         cycle.submittedUserTurnId = id;
         cycle.submittedUserTurnElement = submitted;
+        stopBindObserver();
         logger.debug(`AI Studio submission cycle ${cycle.epoch} bound to verified user turn ${id}`);
       }
     } else {
@@ -382,6 +541,7 @@ const refreshSubmissionCycle = (): void => {
       if (id) {
         cycle.submittedUserTurnId = id;
         cycle.submittedUserTurnElement = userTurn;
+        stopBindObserver();
       }
     }
   }
@@ -433,18 +593,6 @@ const beginSubmissionCycle = (
   pruneInvocationRecords();
 
   const now = Date.now();
-  // A trusted Enter and the app's own send click can describe the same send. Keep the first
-  // snapshot instead of replacing the baseline after the user turn was already inserted.
-  if (
-    cycle &&
-    origin !== 'regenerate' &&
-    cycle.origin !== 'regenerate' &&
-    !cycle.submittedUserTurnId &&
-    now - cycle.startedAt < 800
-  ) {
-    return;
-  }
-
   // Private, transient evidence from the composer at the moment of the real send. A regenerate
   // has no new draft; it is handled from the regenerated turn's own preceding user turn.
   const composer = origin === 'regenerate' ? null : readSubmittedComposer();
@@ -453,6 +601,20 @@ const beginSubmissionCycle = (
     : (explicitDraft?.trim() || composer?.draft || '');
   if (origin !== 'regenerate' && !draft) {
     logger.debug('AI Studio send ignored: composer has no submitted content');
+    return;
+  }
+
+  // A trusted Enter and the app's own send click can describe the same send. Keep the first
+  // snapshot only when the draft is unchanged; if the composer changed (e.g. newline then edit
+  // or flushed chip payload), start a fresh cycle with the updated draft.
+  if (
+    cycle &&
+    origin !== 'regenerate' &&
+    cycle.origin !== 'regenerate' &&
+    !cycle.submittedUserTurnId &&
+    now - cycle.startedAt < 800 &&
+    cycle.submittedDraft === draft
+  ) {
     return;
   }
 
@@ -472,6 +634,7 @@ const beginSubmissionCycle = (
     conversation: currentConversation(),
     conversationAliases: new Set([currentConversation()]),
     submittedDraft: draft,
+    renderedChunks: new WeakMap(),
     submittedComposer: composer?.element ?? null,
     expiresAt: now + BIND_TIMEOUT_MS,
     firstSendMigrated: false,
@@ -483,13 +646,14 @@ const beginSubmissionCycle = (
     allowedTurnIds: new Set(),
     regenerate: origin === 'regenerate',
   };
+  ensureBindObserver();
   logger.debug(`AI Studio submission cycle ${cycle.epoch} started (${origin})`);
 };
 
 const isInsideComposer = (target: Element | null): boolean => {
   if (!target) return false;
   if (target.closest('#mcp-button-wrapper, #mcp-popover-container')) return false;
-  const composer = target.closest(COMPOSER_SELECTOR);
+  const composer = target instanceof HTMLElement ? getComposerRoot(target) : target.closest(COMPOSER_SELECTOR);
   if (!composer) return false;
   return !!target.closest('textarea, [contenteditable="true"]');
 };
@@ -497,11 +661,11 @@ const isInsideComposer = (target: Element | null): boolean => {
 const isRegenerateControl = (target: Element | null): boolean =>
   !!target?.closest(REGENERATE_CONTROL_SELECTOR);
 
-const isSendControl = (target: Element | null): boolean => {
-  const control = target?.closest<HTMLElement>(SEND_CONTROL_SELECTOR);
-  if (!control) return false;
+const isComposerSendControl = (control: HTMLButtonElement): boolean => {
   if (control.closest('#mcp-button-wrapper, #mcp-popover-container')) return false;
-  if (!control.closest(COMPOSER_SELECTOR)) return false;
+  if (!getComposerRoot(control)) return false;
+  if (control.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+  if (control.checkVisibility?.({ visibilityProperty: true }) === false) return false;
   const vocabulary = [
     control.getAttribute('aria-label'),
     control.getAttribute('title'),
@@ -513,10 +677,24 @@ const isSendControl = (target: Element | null): boolean => {
   if (/(?:^|[\s_-])(?:stop|pause|mic|microphone|attach|upload)(?:[\s_-]|$)|停止|中止|暂停/i.test(vocabulary)) {
     return false;
   }
-  if ((control as HTMLButtonElement).disabled || control.getAttribute('aria-disabled') === 'true') {
-    return false;
-  }
   return true;
+};
+
+export const isAistudioSendButtonEnabled = (button: HTMLButtonElement): boolean =>
+  !button.matches(':disabled, [aria-disabled="true"], .disabled');
+
+const isSendControl = (target: Element | null): boolean => {
+  const button = target?.closest<HTMLButtonElement>(SEND_CONTROL_SELECTOR);
+  return !!button && isComposerSendControl(button) && isAistudioSendButtonEnabled(button);
+};
+
+/** Resolve Run for the same editor that owns the payload, never a different composer. */
+export const findAistudioSendButton = (editor: HTMLElement): HTMLButtonElement | null => {
+  const composer = getComposerRoot(editor);
+  if (!composer) return null;
+  const controls = [...composer.querySelectorAll<HTMLButtonElement>(SEND_CONTROL_SELECTOR)]
+    .filter(button => getComposerRoot(button) === composer && isComposerSendControl(button));
+  return controls.find(button => button.matches('ms-run-button button')) ?? controls[0] ?? null;
 };
 
 /** Current non-empty composer draft and its editor, for a deferred send to pin its scope. */
@@ -527,27 +705,30 @@ export const getAistudioComposerSnapshot = (): { draft: string; element: HTMLEle
 export const getAistudioComposerElement = (): HTMLElement | null => findComposerEditor();
 
 /** True when the real AI Studio send control is present, scoped to the composer, and enabled. */
-export const isAistudioSendControlReady = (): boolean => {
+export const isAistudioSendControlReady = (editor = getAistudioComposerElement()): boolean => {
   if (!isAistudioHost()) return false;
-  return Array.from(document.querySelectorAll<HTMLElement>(SEND_CONTROL_SELECTOR)).some(control =>
-    isSendControl(control),
-  );
+  const button = editor && findAistudioSendButton(editor);
+  return !!button && isAistudioSendButtonEnabled(button);
 };
 
 const onKeyDown = (event: KeyboardEvent): void => {
   if (!event.isTrusted) return;
-  // AI Studio sends on plain Enter; Shift+Enter is a newline, other modifiers are not send
-  // shortcuts. Ignore them so an unrelated action cannot arm a submission cycle.
+  // AI Studio sends on Ctrl+Enter by default (button.ctrl-enter-submits) or plain Enter when
+  // configured for Enter-to-submit. Shift+Enter is a newline and Meta/Alt chords are unrelated.
   if (
     event.key !== 'Enter' ||
     event.shiftKey ||
-    event.ctrlKey ||
     event.metaKey ||
     event.altKey ||
     event.isComposing ||
     event.keyCode === 229
   ) return;
-  if (!isInsideComposer(event.target as Element | null)) return;
+  const target = event.target as Element | null;
+  if (!isInsideComposer(target)) return;
+  const composer = target instanceof HTMLElement ? getComposerRoot(target) : null;
+  if (!event.ctrlKey && composer?.querySelector('ms-run-button button.ctrl-enter-submits, button.ctrl-enter-submits')) {
+    return;
+  }
   beginSubmissionCycle('user');
 };
 
@@ -563,7 +744,7 @@ const onClick = (event: MouseEvent): void => {
 
 const onNavigation = (): void => {
   if (cycle) {
-    migrateOrCancelOnNavigation();
+    refreshSubmissionCycle();
     return;
   }
   if (invocationRecords.size === 0 && autoClaims.size === 0) return;
@@ -600,13 +781,51 @@ export const beginExtensionSubmission = (): void => beginSubmissionCycle('extens
 
 /** Outstanding cards and results from this cycle stay cancelled after tools are re-enabled. */
 export const cancelAistudioSubmission = (): void => {
+  stopBindObserver();
   cycle = null;
   clearInvocationRecords();
 };
 
+/**
+ * True when the document is still in the same AI Studio conversation as `savedConversation`,
+ * including a verified first-send URL migration (/prompts/new_chat -> /prompts/<id>). Any other
+ * navigation invalidates the cycle/invocation records and fails closed.
+ */
+export const isSameAistudioConversation = (
+  savedConversation: string,
+  provenance?: AistudioProvenance | null,
+  invocationId?: string | null,
+): boolean => {
+  if (!isAistudioHost()) return true;
+  refreshSubmissionCycle();
+  const current = currentConversation();
+  if (current === savedConversation) return true;
+  if (cycle && cycle.conversationAliases.has(savedConversation) && cycle.conversationAliases.has(current)) {
+    return true;
+  }
+  if (invocationId) {
+    const record = invocationRecords.get(invocationId);
+    if (
+      record &&
+      !record.cancelled &&
+      record.conversationAliases.has(savedConversation) &&
+      record.conversationAliases.has(current)
+    ) {
+      return true;
+    }
+  }
+  if (provenance && cycle && cycle.epoch === provenance.epoch && cycle.conversationAliases.has(provenance.conversation)) {
+    return cycle.conversationAliases.has(savedConversation) && cycle.conversationAliases.has(current);
+  }
+  return false;
+};
+
 /** Called by the adapter when its submission attempt failed, so no cycle is left armed. */
 export const abortExtensionSubmission = (): void => {
-  if (cycle?.origin === 'extension' && !cycle.submittedUserTurnId) cycle = null;
+  if (cycle?.origin === 'extension' && !cycle.submittedUserTurnId) {
+    stopBindObserver();
+    cycle = null;
+  }
 };
 
 /**
@@ -845,6 +1064,7 @@ export const __resetAistudioTurnGateForTests = (): void => {
     window.clearInterval(urlPollTimer);
     urlPollTimer = null;
   }
+  stopBindObserver();
   initialized = false;
   cycle = null;
   nextEpoch = 1;

@@ -33,6 +33,7 @@ import {
   isAistudioDeliveryAuthorized,
   isAistudioHost,
   isAistudioSendControlReady,
+  isSameAistudioConversation,
   type AistudioProvenance,
 } from '../render_prescript/src/provenance/aistudioTurnGate';
 import { createLogger } from '@extension/shared/lib/logger';
@@ -134,7 +135,7 @@ interface DeferredSubmit {
   conversation: string;
   observer: MutationObserver;
   interval: number;
-  inputListener: () => void;
+  inputListener: (event: Event) => void;
   attempting: boolean;
   cancelled: boolean;
 }
@@ -495,7 +496,7 @@ export class AutomationService {
     const captured = this.insertedSnapshots.get(detail.invocationId);
     if (!captured) return true;
     if (!captured.element.isConnected) return false;
-    if (this.currentConversation() !== captured.conversation) return false;
+    if (!isSameAistudioConversation(captured.conversation, detail.provenance, detail.invocationId)) return false;
     return this.normalizeDraft(this.composerValue(captured.element)) === captured.draft;
   }
 
@@ -528,7 +529,10 @@ export class AutomationService {
 
   private isDeferredScopeValid(record: DeferredSubmit): boolean {
     if (!isAistudioHost() || record.cancelled) return false;
-    if (this.currentConversation() !== record.conversation) return false;
+    const sampleDetail = record.details.values().next().value as ToolExecutionCompleteDetail | undefined;
+    if (!isSameAistudioConversation(record.conversation, sampleDetail?.provenance, sampleDetail?.invocationId)) {
+      return false;
+    }
     if (!record.composer.isConnected) return false;
     if (this.normalizeDraft(this.composerValue(record.composer)) !== record.expectedDraft) return false;
 
@@ -552,7 +556,7 @@ export class AutomationService {
     const captured = this.insertedSnapshots.get(detail.invocationId);
     if (!captured || captured.pendingChip) return;
     const conversation = this.currentConversation();
-    if (conversation !== captured.conversation) return;
+    if (!isSameAistudioConversation(captured.conversation, detail.provenance, detail.invocationId)) return;
     if (!captured.element.isConnected) return;
     if (this.normalizeDraft(this.composerValue(captured.element)) !== captured.draft) {
       // The user edited the composer during the busy wait. Never pin/send that draft.
@@ -584,7 +588,7 @@ export class AutomationService {
       if (
         !existing.cancelled &&
         existing.composer === captured.element &&
-        existing.conversation === conversation
+        isSameAistudioConversation(existing.conversation, detail.provenance, detail.invocationId)
       ) {
         // Another late result landed in the same composer before the send control recovered.
         // One send will carry all of them; keep a single readiness observer and one invocation set.
@@ -602,10 +606,6 @@ export class AutomationService {
       this.cancelDeferredSubmit('composer changed while waiting');
     }
 
-    const inputListener = () => this.cancelDeferredSubmit('composer edited');
-    captured.element.addEventListener('input', inputListener);
-    captured.element.addEventListener('beforeinput', inputListener);
-
     const observer = new MutationObserver(() => {
       void this.maybeAttemptDeferredSubmit();
     });
@@ -619,6 +619,11 @@ export class AutomationService {
 
     const invocationIds = new Set<string>();
     for (const item of detailsToAdd) if (item.invocationId) invocationIds.add(item.invocationId);
+    const inputListener = (event: Event) => {
+      if (event.isTrusted || this.normalizeDraft(this.composerValue(captured.element)) !== record.expectedDraft) {
+        this.cancelDeferredSubmit('composer edited');
+      }
+    };
     const record: DeferredSubmit = {
       details: detailsToAdd,
       invocationIds,
@@ -634,6 +639,8 @@ export class AutomationService {
       attempting: false,
       cancelled: false,
     };
+    captured.element.addEventListener('input', inputListener);
+    captured.element.addEventListener('beforeinput', inputListener);
     this.deferredSubmit = record;
     logger.debug('[AutomationService] Deferred AI Studio send queued until the composer is ready', {
       pendingInvocations: invocationIds.size,
@@ -648,7 +655,7 @@ export class AutomationService {
       this.cancelDeferredSubmit('scope/settings/composer changed');
       return;
     }
-    if (!isAistudioSendControlReady()) return;
+    if (!isAistudioSendControlReady(record.composer)) return;
 
     record.attempting = true;
     try {
