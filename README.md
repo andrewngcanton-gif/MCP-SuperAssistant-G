@@ -8,7 +8,7 @@
   <strong>中文</strong> &bull; <a href="README.en.md">English</a>
 </p>
 
-**MCP SuperAssistant G** 是基于 [原版 MCP SuperAssistant v0.7.3](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3) 的社区定制版。它让 Gemini、Google AI Studio 等网页 AI 通过浏览器扩展使用 MCP 工具。本项目通过 GitHub 提供源码，使用 Chrome 开发者模式加载自行构建的扩展。
+**MCP SuperAssistant G** 是基于 [原版 MCP SuperAssistant v0.7.3](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3) 的社区增强版 Chrome 扩展，让 Gemini 网页版、Google AI Studio 等网页 AI 直接使用本地 MCP 工具。相比原版，重点修复了自动发送与历史对话回放问题，大幅精简了省 token 的工具说明，并针对 WebCodex 与 RTK 做了开箱适配。本项目通过 GitHub 提供源码，按下方步骤自行构建后在 Chrome 开发者模式加载即可使用。
 
 原版基线为 `30bb204`。 [`main` 保存原版源码快照，`custom` 是本项目的默认分支](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/compare/main...custom)。
 

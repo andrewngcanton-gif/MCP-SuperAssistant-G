@@ -8,7 +8,7 @@
   <a href="README.md">中文</a> &bull; <strong>English</strong>
 </p>
 
-**MCP SuperAssistant G** is a community build based on [MCP SuperAssistant v0.7.3](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3). It brings MCP tools to web chat apps such as Gemini and Google AI Studio through a browser extension. This repository provides the source. Build it and load it using Chrome Developer mode.
+**MCP SuperAssistant G** is a community-enhanced Chrome extension based on [MCP SuperAssistant v0.7.3](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3) that lets web chats such as Gemini Web and Google AI Studio use local MCP tools directly. Compared to upstream, it focuses on fixing auto-submit and historical replay issues, shrinking tool prompts to save tokens, and adding out-of-the-box support for WebCodex and RTK. This repository provides the source—build it and load it in Chrome Developer mode.
 
 The upstream baseline is commit `30bb204`. [`main` holds the upstream source snapshot, and `custom` is this project's default branch](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/compare/main...custom).
 
