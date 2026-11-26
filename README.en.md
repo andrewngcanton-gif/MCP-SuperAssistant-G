@@ -25,7 +25,6 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
   - [3. Load the unpacked extension](#3-load-the-unpacked-extension)
   - [4. Connect an MCP server](#4-connect-an-mcp-server)
     - [Connect WebCodex](#connect-webcodex)
-      - [Get the user token and generate the local config (Windows)](#get-the-user-token-and-generate-the-local-config-windows)
   - [5. Test and update](#5-test-and-update)
 - [Known issues](#known-issues)
 - [License](#license)
@@ -120,66 +119,84 @@ See the [upstream proxy guide](https://github.com/srbhptl39/MCP-SuperAssistant/t
 
 #### Connect WebCodex
 
-The extension connects to MCP SuperAssistant Proxy over SSE. The proxy connects to WebCodex's `/mcp` endpoint using Streamable HTTP. This example uses a local WebCodex **0.5.0** installation.
+[WebCodex](https://github.com/yyjeqhc/webcodex) ([download v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0)) exposes your local project folders as MCP tools (reading files, searching code, running shell commands) so web chats like Gemini and Google AI Studio can work directly with your local codebase.
 
-[WebCodex project](https://github.com/yyjeqhc/webcodex) · [Download WebCodex v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0)
+The connection chain looks like this (the local proxy bridges SSE for the extension to WebCodex's `/mcp` Streamable HTTP endpoint):
 
-1. Start the WebCodex server and Runner, confirm that the Runner is connected, and configure the projects you want to access in WebCodex.
-2. Merge this `webcodex` entry into `mcpServers` in the proxy's `mcp-config.json`. This WebCodex 0.5.0 connection uses `X-WebCodex-MCP-Surface: cli`. Use a user token for the same WebCodex server in `Authorization`. On Windows, the script below can read it from a signed-in Desktop connection. Adjust the example port `60143` to match your server.
+```text
+Web AI (Gemini / AI Studio) ←→ Browser Extension ←→ Local Proxy (SSE) ←→ WebCodex (Local Projects)
+```
 
-   ```json
-   {
-     "mcpServers": {
-       "webcodex": {
-         "type": "streamable-http",
-         "url": "http://127.0.0.1:60143/mcp",
-         "headers": {
-           "X-WebCodex-MCP-Surface": "cli",
-           "Authorization": "Bearer <your WebCodex token>"
+Follow these 4 steps (using local WebCodex **0.5.0** as an example):
+
+1. **Step 1: Get WebCodex running**
+   - Start the WebCodex server (or Desktop app) and Runner, make sure the Runner shows as **Connected**, and register the local project folder(s) you want the AI to access.
+   - Note WebCodex's local port (`60143` in the examples below; adjust if you configured a different port).
+
+2. **Step 2: Create the proxy config file (choose one option)**
+   - **Option A (Recommended on Windows — auto-read token & write config)**: Make sure you are signed in to WebCodex Desktop first, then run this script in **PowerShell 7** (`pwsh`). It finds your local `webcodex-user-token` file and writes `%LOCALAPPDATA%\mcp-superassistant-webcodex.json` (preserving any existing `mcpServers` entries):
+
+     ```powershell
+     # 1) List local signed-in WebCodex token file paths
+     $profileRoot = Join-Path $env:LOCALAPPDATA 'dev.webcodex.desktop/local-connections'
+     Get-ChildItem -LiteralPath $profileRoot -Recurse -File -Filter 'webcodex-user-token' |
+         Select-Object -ExpandProperty FullName
+
+     # 2) Paste one full path from above when prompted (pick the one matching your server/account)
+     $tokenPath = (Read-Host 'Full path of the token file for this WebCodex login').Trim('"')
+     $token = (Get-Content -LiteralPath $tokenPath -Raw -ErrorAction Stop).Trim()
+     if (-not $token) { throw 'The WebCodex token file is empty.' }
+
+     # 3) Write or update the proxy config file (change $configPath if using an existing mcp-config.json)
+     $configPath = Join-Path $env:LOCALAPPDATA 'mcp-superassistant-webcodex.json'
+     $config = if (Test-Path -LiteralPath $configPath) {
+         Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+     } else {
+         @{ mcpServers = @{} }
+     }
+     if (-not $config.Contains('mcpServers')) { $config['mcpServers'] = @{} }
+     $config.mcpServers['webcodex'] = @{
+         type = 'streamable-http'
+         url = 'http://127.0.0.1:60143/mcp'
+         headers = @{
+             'X-WebCodex-MCP-Surface' = 'cli'
+             'Authorization' = "Bearer $token"
+         }
+     }
+     $config | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $configPath -Encoding utf8 -ErrorAction Stop
+     ```
+
+     > If nothing is listed, sign in to that connection in WebCodex Desktop first, or issue a user API token from the WebCodex server and use Option B below.
+
+   - **Option B (Manual config or non-Windows)**: Merge this `webcodex` entry into `mcpServers` in your proxy's `mcp-config.json` (updating the port and `<your WebCodex token>`):
+
+     ```json
+     {
+       "mcpServers": {
+         "webcodex": {
+           "type": "streamable-http",
+           "url": "http://127.0.0.1:60143/mcp",
+           "headers": {
+             "X-WebCodex-MCP-Surface": "cli",
+             "Authorization": "Bearer <your WebCodex token>"
+           }
          }
        }
      }
-   }
-   ```
+     ```
 
-3. Start or restart the proxy using the command above. In the extension sidebar, select **SSE** and connect to `http://localhost:3006/sse`. Check that the WebCodex tools are listed and enabled under **Tools**.
-4. Insert and send the updated **MCP Instructions** in the chat. To verify the connection, ask the model to list projects with `list_projects` or open a known project with `work_on_project`.
+3. **Step 3: Start the proxy and connect in the extension**
+   - For **Option A**, start (or restart) the proxy with the command below and leave it running; for **Option B**, point `--config` to your own `./mcp-config.json`:
 
-##### Get the user token and generate the local config (Windows)
+     ```powershell
+     npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp-superassistant-webcodex.json" --outputTransport sse --port 3006
+     ```
 
-For a signed-in WebCodex Desktop 0.5.0 connection, this **PowerShell 7** script lists the paths to `webcodex-user-token` files. If several are listed, choose the one for the target server and account. If none are listed, sign in to that connection in WebCodex Desktop or use a user API token issued by the server. The script displays file paths and writes the bearer token to a local config outside the repository. To update an existing proxy config, set `$configPath` to its path. The script preserves the other `mcpServers` entries.
+   - In the extension sidebar's connection settings, choose **SSE**, enter `http://localhost:3006/sse` as **Server URI**, and click **Connect**. Once **Connected**, open the **Tools** tab and confirm the WebCodex tools (such as `webcodex.list_projects` and `webcodex.run_shell`) are listed and enabled.
 
-```powershell
-$profileRoot = Join-Path $env:LOCALAPPDATA 'dev.webcodex.desktop/local-connections'
-Get-ChildItem -LiteralPath $profileRoot -Recurse -File -Filter 'webcodex-user-token' |
-    Select-Object -ExpandProperty FullName
-
-$tokenPath = (Read-Host 'Full path of the token file for this WebCodex login').Trim('"')
-$token = (Get-Content -LiteralPath $tokenPath -Raw -ErrorAction Stop).Trim()
-if (-not $token) { throw 'The WebCodex token file is empty.' }
-$configPath = Join-Path $env:LOCALAPPDATA 'mcp-superassistant-webcodex.json'
-$config = if (Test-Path -LiteralPath $configPath) {
-    Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-} else {
-    @{ mcpServers = @{} }
-}
-if (-not $config.Contains('mcpServers')) { $config['mcpServers'] = @{} }
-$config.mcpServers['webcodex'] = @{
-    type = 'streamable-http'
-    url = 'http://127.0.0.1:60143/mcp'
-    headers = @{
-        'X-WebCodex-MCP-Surface' = 'cli'
-        'Authorization' = "Bearer $token"
-    }
-}
-$config | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $configPath -Encoding utf8 -ErrorAction Stop
-```
-
-If you used the default config path, start the proxy with this command.
-
-```powershell
-npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp-superassistant-webcodex.json" --outputTransport sse --port 3006
-```
+4. **Step 4: Send a quick verification message**
+   - Click **MCP → Insert** next to the chat composer to insert the **MCP Instructions**, then type "List my WebCodex projects" and send.
+   - Once the model calls `list_projects` and returns your project list, the setup is complete (from there, ask it to open a project with `work_on_project`).
 
 ### 5. Test and update
 

@@ -25,7 +25,6 @@
   - [3. 加载已解压的扩展](#3-加载已解压的扩展)
   - [4. 连接 MCP 服务器](#4-连接-mcp-服务器)
     - [与 WebCodex 配合使用](#与-webcodex-配合使用)
-      - [获取用户 token 并生成本地配置（Windows）](#获取用户-token-并生成本地配置windows)
   - [5. 试跑并更新](#5-试跑并更新)
 - [已知问题](#已知问题)
 - [许可证](#许可证)
@@ -120,66 +119,84 @@ pnpm build
 
 #### 与 WebCodex 配合使用
 
-扩展连接 MCP SuperAssistant Proxy 的 SSE 地址，代理再通过 Streamable HTTP 连接 WebCodex 的 `/mcp`。以下配置以本地 WebCodex **0.5.0** 为例。
+[WebCodex](https://github.com/yyjeqhc/webcodex)（[下载 v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0)）可以把你电脑上的代码目录打包成“读文件 / 搜代码 / 跑终端命令”等 MCP 工具，让网页里的 Gemini 或 AI Studio 也能像本地编程助手一样查看和修改你的本地项目。
 
-[WebCodex 项目](https://github.com/yyjeqhc/webcodex) · [下载 WebCodex v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0)
+整体连接链路如下（本地 Proxy 负责把本扩展使用的 SSE 协议桥接到 WebCodex 的 `/mcp` 接口）：
 
-1. 启动 WebCodex 服务和 Runner，确认 Runner 已连接，并在 WebCodex 中配置要访问的项目。
-2. 将下面的 `webcodex` 条目合并到代理 `mcp-config.json` 的 `mcpServers` 中。WebCodex 0.5.0 的这个连接方式使用 `X-WebCodex-MCP-Surface: cli`。`Authorization` 使用同一 WebCodex 服务的用户 token，Windows 可按下方脚本从桌面版的已登录连接读取。按实际情况调整示例端口 `60143`。
+```text
+网页 AI（Gemini / AI Studio） ←→ 本浏览器扩展 ←→ 本地 Proxy（SSE） ←→ WebCodex（本地项目）
+```
 
-   ```json
-   {
-     "mcpServers": {
-       "webcodex": {
-         "type": "streamable-http",
-         "url": "http://127.0.0.1:60143/mcp",
-         "headers": {
-           "X-WebCodex-MCP-Surface": "cli",
-           "Authorization": "Bearer <你的 WebCodex token>"
+按下面 4 步即可接通（以下以本地 WebCodex **0.5.0** 为例）：
+
+1. **第 1 步：准备好 WebCodex**
+   - 启动 WebCodex 服务端（或桌面端）和 Runner，确认界面里显示 Runner **已连接**，并添加好你要让 AI 访问的本地项目目录。
+   - 记下 WebCodex 服务的本地端口（下文以默认示例 `60143` 为例，若你改过端口请一并替换）。
+
+2. **第 2 步：生成代理配置文件（二选一）**
+   - **方式 A（推荐，Windows 一键读取并生成）**：先确保已在 WebCodex Desktop 中登录；在 **PowerShell 7**（`pwsh`）里运行下面整段脚本，它会自动查找你本机的 `webcodex-user-token` 文件，并把配置写入 `%LOCALAPPDATA%\mcp-superassistant-webcodex.json`（如果该文件已有其它 MCP 服务，脚本会保留原有条目）：
+
+     ```powershell
+     # 1) 列出本机已登录的 WebCodex token 文件路径
+     $profileRoot = Join-Path $env:LOCALAPPDATA 'dev.webcodex.desktop/local-connections'
+     Get-ChildItem -LiteralPath $profileRoot -Recurse -File -Filter 'webcodex-user-token' |
+         Select-Object -ExpandProperty FullName
+
+     # 2) 复制上面输出的完整路径粘贴到提示后（若有多条，选目标服务和账号对应的那一条）
+     $tokenPath = (Read-Host 'Full path of the token file for this WebCodex login').Trim('"')
+     $token = (Get-Content -LiteralPath $tokenPath -Raw -ErrorAction Stop).Trim()
+     if (-not $token) { throw 'The WebCodex token file is empty.' }
+
+     # 3) 写入或更新代理配置文件（已有自建 mcp-config.json 时可把下面路径改成你的文件）
+     $configPath = Join-Path $env:LOCALAPPDATA 'mcp-superassistant-webcodex.json'
+     $config = if (Test-Path -LiteralPath $configPath) {
+         Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+     } else {
+         @{ mcpServers = @{} }
+     }
+     if (-not $config.Contains('mcpServers')) { $config['mcpServers'] = @{} }
+     $config.mcpServers['webcodex'] = @{
+         type = 'streamable-http'
+         url = 'http://127.0.0.1:60143/mcp'
+         headers = @{
+             'X-WebCodex-MCP-Surface' = 'cli'
+             'Authorization' = "Bearer $token"
+         }
+     }
+     $config | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $configPath -Encoding utf8 -ErrorAction Stop
+     ```
+
+     > 若脚本没有列出任何文件路径，说明尚未在 WebCodex Desktop 登录该连接；请先在桌面端完成登录，或直接在 WebCodex 服务端签发用户 API token 后改用下面的方式 B。
+
+   - **方式 B（手动编写或非 Windows 系统）**：将下面条目加入你的代理配置文件 `mcp-config.json`（按实际修改端口和 `<你的 WebCodex token>`）：
+
+     ```json
+     {
+       "mcpServers": {
+         "webcodex": {
+           "type": "streamable-http",
+           "url": "http://127.0.0.1:60143/mcp",
+           "headers": {
+             "X-WebCodex-MCP-Surface": "cli",
+             "Authorization": "Bearer <你的 WebCodex token>"
+           }
          }
        }
      }
-   }
-   ```
+     ```
 
-3. 用上面的命令启动或重启代理，在扩展侧栏选择 **SSE** 并连接 `http://localhost:3006/sse`。到 **Tools** 确认 WebCodex 工具已出现并启用。
-4. 在聊天里插入并发送更新后的 **MCP Instructions**，再请模型用 `list_projects` 列出项目，或用 `work_on_project` 打开一个已知项目，验证连接。
+3. **第 3 步：启动代理并在扩展中连接**
+   - 如果采用 **方式 A**，运行下面命令启动（或重启）代理并保持窗口开启；如果采用 **方式 B**，把 `--config` 换成你自己的 `./mcp-config.json` 路径：
 
-##### 获取用户 token 并生成本地配置（Windows）
+     ```powershell
+     npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp-superassistant-webcodex.json" --outputTransport sse --port 3006
+     ```
 
-对已经登录的 WebCodex Desktop 0.5.0，下面的 **PowerShell 7** 脚本会先列出 `webcodex-user-token` 文件的路径。若有多个，选择与目标服务器和账号对应的文件。若找不到文件，先在 WebCodex Desktop 登录该连接，或使用该服务器为你签发的用户 API token。脚本只显示文件路径，把 Bearer token 写入仓库外的本地配置文件。已有代理配置时，可以把 `$configPath` 改成它的路径，脚本会保留其他 `mcpServers` 条目。
+   - 打开网页侧栏的连接设置，连接类型选 **SSE**，**Server URI** 填 `http://localhost:3006/sse` 后点击 **Connect**。显示 **Connected** 后，切换到 **Tools** 标签页，确认已能看到并勾选 WebCodex 工具（例如 `webcodex.list_projects`、`webcodex.run_shell` 等）。
 
-```powershell
-$profileRoot = Join-Path $env:LOCALAPPDATA 'dev.webcodex.desktop/local-connections'
-Get-ChildItem -LiteralPath $profileRoot -Recurse -File -Filter 'webcodex-user-token' |
-    Select-Object -ExpandProperty FullName
-
-$tokenPath = (Read-Host 'Full path of the token file for this WebCodex login').Trim('"')
-$token = (Get-Content -LiteralPath $tokenPath -Raw -ErrorAction Stop).Trim()
-if (-not $token) { throw 'The WebCodex token file is empty.' }
-$configPath = Join-Path $env:LOCALAPPDATA 'mcp-superassistant-webcodex.json'
-$config = if (Test-Path -LiteralPath $configPath) {
-    Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-} else {
-    @{ mcpServers = @{} }
-}
-if (-not $config.Contains('mcpServers')) { $config['mcpServers'] = @{} }
-$config.mcpServers['webcodex'] = @{
-    type = 'streamable-http'
-    url = 'http://127.0.0.1:60143/mcp'
-    headers = @{
-        'X-WebCodex-MCP-Surface' = 'cli'
-        'Authorization' = "Bearer $token"
-    }
-}
-$config | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath $configPath -Encoding utf8 -ErrorAction Stop
-```
-
-使用脚本的默认配置路径时，用以下命令启动代理。
-
-```powershell
-npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp-superassistant-webcodex.json" --outputTransport sse --port 3006
-```
+4. **第 4 步：发一条消息验证**
+   - 在聊天输入框旁的 **MCP** 菜单点击 **Insert** 插入最新的 **MCP Instructions**，随后输入「列出我的 WebCodex 项目」并发送。
+   - 看到模型调用 `list_projects` 并返回项目列表，即表示整套链路已打通（后续可让它用 `work_on_project` 打开具体项目开始工作）。
 
 ### 5. 试跑并更新
 
