@@ -261,17 +261,25 @@ export const monitorNode = (node: HTMLElement, blockId: string): void => {
         // This stream has likely ended abruptly
         abruptlyEndedStreams.add(blockId);
 
-        // Signal this as stalled right away instead of waiting for timeout
-        const functionBlock = document.querySelector(`.function-block[data-block-id="${blockId}"]`);
-        if (functionBlock && functionBlock.classList.contains('function-loading')) {
-          // Use our custom event to trigger stalled stream handling
-          const event = new CustomEvent('stream-abruptly-ended', {
-            detail: { blockId, element: functionBlock },
-          });
-          document.dispatchEvent(event);
+        // Signal every still-loading card owned by this block (including multi-call segments
+        // `${blockId}-s1`, `${blockId}-s2`, …) as stalled right away instead of spinning forever.
+        const loadingCards = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            `.function-block.function-loading[data-block-id="${blockId}"], .function-block.function-loading[data-block-id^="${blockId}-s"]`,
+          ),
+        );
+        if (loadingCards.length > 0) {
+          for (const card of loadingCards) {
+            const cardId = card.getAttribute('data-block-id') || blockId;
+            document.dispatchEvent(
+              new CustomEvent('stream-abruptly-ended', {
+                detail: { blockId: cardId, element: card },
+              }),
+            );
+          }
 
           if (CONFIG.debug) {
-            logger.debug(`Detected abruptly ended stream for block ${blockId}`);
+            logger.debug(`Detected abruptly ended stream for block ${blockId} (${loadingCards.length} card(s))`);
           }
 
           // We can clear this interval now

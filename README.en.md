@@ -32,12 +32,18 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## Changelog
 
+For implementation-level technical notes, see [CUSTOMIZATIONS.md](CUSTOMIZATIONS.md#technical-changelog).
+
+### v0.1.2
+
+- **Fixed Gemini tool results occasionally stalling in the input box without auto-sending.** When Gemini is still finishing its reply, auto-submit now waits briefly for generation to end instead of aborting immediately, and no longer aborts on editor whitespace formatting.
+- **Fixed interrupted tool cards spinning indefinitely.** When a model response is cut off mid-tool-call, the card now stops spinning and shows that the stream was interrupted.
+
 ### v0.1.1
 
-- **Fixed AI Studio `Ctrl+Enter` omitting MCP Instructions.** Both clicking **Run** and pressing `Ctrl+Enter` now merge pending instruction chips with the draft and submit once. Plain `Enter` stays a newline in AI Studio's default `Ctrl+Enter` mode, and duplicate clicks/keystrokes during submission are ignored.
-- **Fixed first-turn AI Studio tool cards stalling at manual `Run` in new chats.** Shared new-chat URLs (`/prompts/new_chat`, etc.) are no longer persisted or matched in URL-keyed local execution history, so a prior new chat's execution (such as `get_tool_schema`) cannot block auto-execution in later new chats. AI Studio auto-execution deduplication now relies strictly on turn-scoped provenance claims.
-- **Fixed AI Studio tool results expanding into the composer without auto-submitting across first-send URL migration.** User turns are now bound eagerly as soon as they mount so long model thinking phases do not expire the cycle; draft verification tolerates collapsed whitespace, Markdown rules, Angular comment nodes, and both card-render orders; and a verified `/prompts/new_chat` → `/prompts/<id>` migration between auto-insert and auto-submit no longer cancels the pending send.
-- **Fixed AI Studio send-button scoping and form-state synchronization.** Text insertion uses the native textarea setter and dispatches `InputEvent`/`change` so Angular clears `aria-disabled` on **Run**; auto-submit targets only the active composer's enabled **Run** button, waits cleanly when **Stop** or disabled is shown, and cancels immediately on user edit, navigation, or disabling automation.
+- **Fixed AI Studio `Ctrl+Enter` omitting MCP Instructions.** Both clicking **Run** and pressing `Ctrl+Enter` now send pending instructions together with your message, while plain `Enter` stays a newline in default `Ctrl+Enter` mode.
+- **Fixed first-turn AI Studio tool cards stalling at manual `Run` in new chats.** Repeating a prompt in a new chat is no longer blocked by an earlier new chat's history.
+- **Fixed AI Studio tool results stalling after expansion and long thinking phases breaking auto-execution.** Tool execution and automatic result submission now continue smoothly even after long model thinking or the initial new-chat URL redirect.
 
 ## Bug fixes
 

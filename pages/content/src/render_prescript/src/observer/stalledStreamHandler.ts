@@ -160,8 +160,9 @@ export const createStalledIndicator = (blockId: string, block: HTMLElement, isAb
   stalledStreams.add(blockId);
   stalledStreamRetryCount.set(blockId, 0);
 
-  // Remove the loading spinner
+  // Remove the loading state and spinner element so truncated cards stop spinning
   block.classList.remove('function-loading');
+  block.querySelectorAll('.spinner').forEach(spinner => spinner.remove());
   // Add a stalled class for styling
   block.classList.add('function-stalled');
 

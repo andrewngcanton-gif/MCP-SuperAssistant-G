@@ -18,6 +18,8 @@ const logger = createLogger('GeminiAdapter');
 
 /** Bound for waiting on Gemini to render/enable the send control after a chip flush. */
 const SUBMIT_READY_TIMEOUT_MS = 4000;
+/** Bound for waiting on Gemini's Stop control to clear when a tool finishes before streaming ends. */
+const STOP_CLEAR_TIMEOUT_MS = 15000;
 /** Re-evaluation cadence while waiting for the composer to settle. */
 const SUBMIT_POLL_INTERVAL_MS = 120;
 
@@ -28,7 +30,7 @@ const SUBMIT_POLL_INTERVAL_MS = 120;
 const NON_SEND_CONTROL_RE =
   /(?:^|[\s_-])(?:stop|microphone|mic|voice|audio|dictation|attach|attachment|upload|add\s*files?|tools?|model|settings|menu|more)(?:[\s_-]|$)/i;
 const STOP_CONTROL_RE = /(?:^|[\s_-])(?:stop|pause)(?:[\s_-]|$)|停止|中止|暫停|暂停/i;
-const SEND_HINT_RE = /^(?:send|submit)(?:[ -](?:message|prompt|button))?$|^(?:发送|傳送|送出)(?:消息|訊息)?$/i;
+const SEND_HINT_RE = /^(?:send|submit)(?:[ -](?:message|prompt|button))?$|^(?:发送|傳送|送出)(?:消息|訊息|提示)?$|^提交$/i;
 
 interface GeminiComposerContext {
   input: HTMLElement;
@@ -334,6 +336,35 @@ export class GeminiAdapter extends BaseAdapterPlugin {
 
     try {
       if (options?.canProceed && !options.canProceed()) return this.abortSubmit('Original composer is unavailable');
+
+      // Wait for an active Stop control to clear *before* flushing chips so a tool result that
+      // finishes while Gemini is still closing its turn does not get expanded and abandoned.
+      const preFlushComposer = this.resolveComposerContext();
+      if (preFlushComposer && this.findVisibleStopControl(preFlushComposer.root)) {
+        const preSnapshot: GeminiComposerSnapshot = {
+          href: window.location.href,
+          input: preFlushComposer.input,
+          draft: this.readDraft(preFlushComposer.input),
+        };
+        const stopWaitMs = options?.readinessTimeoutMs !== undefined
+          ? Math.max(0, options.readinessTimeoutMs)
+          : STOP_CLEAR_TIMEOUT_MS;
+        const stopDeadline = Date.now() + stopWaitMs;
+        while (true) {
+          if (options?.canProceed && !options.canProceed()) return this.abortSubmit('Original composer changed while waiting for Gemini to finish');
+          const changed = this.getComposerChange(preSnapshot);
+          if (changed) return this.abortSubmit(`Composer changed while waiting for Gemini to finish (${changed})`);
+          const root = this.resolveComposerRoot(preSnapshot.input);
+          if (!root.isConnected || !root.contains(preSnapshot.input)) {
+            return this.abortSubmit('Composer wrapper was replaced while waiting for Gemini to finish');
+          }
+          if (!this.findVisibleStopControl(root)) break;
+          const remaining = stopDeadline - Date.now();
+          if (remaining <= 0) return this.abortSubmit('Gemini is generating (stop control present)');
+          await new Promise(resolve => setTimeout(resolve, Math.min(SUBMIT_POLL_INTERVAL_MS, remaining)));
+        }
+      }
+
       const flushed = await inputChips.flushBeforeSubmit(this);
       if (!flushed) {
         // flushBeforeSubmit restores the chips on failure. Sending now could submit a partial draft.
@@ -352,6 +383,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
         draft: this.readDraft(composer.input),
       };
       const deadline = Date.now() + Math.max(0, options?.readinessTimeoutMs ?? SUBMIT_READY_TIMEOUT_MS);
+      let sawStopControl = false;
 
       while (true) {
         const changed = this.getComposerChange(snapshot);
@@ -365,26 +397,28 @@ export class GeminiAdapter extends BaseAdapterPlugin {
         }
 
         if (this.findVisibleStopControl(root)) {
-          return this.abortSubmit('Gemini is generating (stop control present)');
-        }
-        const submitButton = this.findUsableSendControl(root);
-        if (submitButton) {
-          // Re-check synchronously immediately before the single click.
-          const lateChange = this.getComposerChange(snapshot);
-          if (lateChange) return this.abortSubmit(`Composer changed before click (${lateChange})`);
-          if (options?.canProceed && !options.canProceed()) return this.abortSubmit('Original composer changed before click');
+          sawStopControl = true;
+        } else {
+          sawStopControl = false;
+          const submitButton = this.findUsableSendControl(root);
+          if (submitButton) {
+            // Re-check synchronously immediately before the single click.
+            const lateChange = this.getComposerChange(snapshot);
+            if (lateChange) return this.abortSubmit(`Composer changed before click (${lateChange})`);
+            if (options?.canProceed && !options.canProceed()) return this.abortSubmit('Original composer changed before click');
 
-          submitButton.click();
-          this.emitExecutionCompleted('submitForm', {
-            formElement: options?.formElement?.tagName || 'unknown'
-          }, {
-            success: true,
-            method: 'send-control.click',
-            control: this.describeControl(submitButton)
-          });
+            submitButton.click();
+            this.emitExecutionCompleted('submitForm', {
+              formElement: options?.formElement?.tagName || 'unknown'
+            }, {
+              success: true,
+              method: 'send-control.click',
+              control: this.describeControl(submitButton)
+            });
 
-          this.context.logger.debug('Gemini send control clicked');
-          return true;
+            this.context.logger.debug('Gemini send control clicked');
+            return true;
+          }
         }
 
         const remaining = deadline - Date.now();
@@ -392,7 +426,9 @@ export class GeminiAdapter extends BaseAdapterPlugin {
         await new Promise(resolve => setTimeout(resolve, Math.min(SUBMIT_POLL_INTERVAL_MS, remaining)));
       }
 
-      return this.abortSubmit('No usable Gemini send control found');
+      return this.abortSubmit(
+        sawStopControl ? 'Gemini is generating (stop control present)' : 'No usable Gemini send control found',
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.context.logger.error(`Error submitting Gemini chat input: ${errorMessage}`);
@@ -466,10 +502,16 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     return input.textContent ?? '';
   }
 
+  private normalizeDraft(text: string): string {
+    return text.replace(/\s+/g, ' ').trim();
+  }
+
   private getComposerChange(snapshot: GeminiComposerSnapshot): string | null {
     if (window.location.href !== snapshot.href) return 'navigation';
     if (!snapshot.input.isConnected) return 'editor node replaced';
-    if (this.readDraft(snapshot.input) !== snapshot.draft) return 'draft text changed';
+    if (this.normalizeDraft(this.readDraft(snapshot.input)) !== this.normalizeDraft(snapshot.draft)) {
+      return 'draft text changed';
+    }
     return null;
   }
 
