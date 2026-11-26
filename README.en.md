@@ -127,13 +127,13 @@ The connection chain looks like this (the local proxy bridges SSE for the extens
 Web AI (Gemini / AI Studio) ←→ Browser Extension ←→ Local Proxy (SSE) ←→ WebCodex (Local Projects)
 ```
 
-Follow these 4 steps (using local WebCodex **0.5.0** as an example):
+Follow these 3 steps (using local WebCodex **0.5.0** as an example):
 
-1. **Step 1: Get WebCodex running**
+1. **Get WebCodex running**
    - Start the WebCodex server (or Desktop app) and Runner, make sure the Runner shows as **Connected**, and register the local project folder(s) you want the AI to access.
    - Note WebCodex's local port (`60143` in the examples below; adjust if you configured a different port).
 
-2. **Step 2: Create the proxy config file (choose one option)**
+2. **Create the proxy config file (choose one option)**
    - **Option A (Recommended on Windows — auto-read token & write config)**: Make sure you are signed in to WebCodex Desktop first, then run this script in **PowerShell 7** (`pwsh`). It finds your local `webcodex-user-token` file and writes `%LOCALAPPDATA%\mcp-superassistant-webcodex.json` (preserving any existing `mcpServers` entries):
 
      ```powershell
@@ -185,7 +185,7 @@ Follow these 4 steps (using local WebCodex **0.5.0** as an example):
      }
      ```
 
-3. **Step 3: Start the proxy and connect in the extension**
+3. **Start the proxy and connect in the extension**
    - For **Option A**, start (or restart) the proxy with the command below and leave it running; for **Option B**, point `--config` to your own `./mcp-config.json`:
 
      ```powershell
@@ -194,13 +194,9 @@ Follow these 4 steps (using local WebCodex **0.5.0** as an example):
 
    - In the extension sidebar's connection settings, choose **SSE**, enter `http://localhost:3006/sse` as **Server URI**, and click **Connect**. Once **Connected**, open the **Tools** tab and confirm the WebCodex tools (such as `webcodex.list_projects` and `webcodex.run_shell`) are listed and enabled.
 
-4. **Step 4: Send a quick verification message**
-   - Click **MCP → Insert** next to the chat composer to insert the **MCP Instructions**, then type "List my WebCodex projects" and send.
-   - Once the model calls `list_projects` and returns your project list, the setup is complete (from there, ask it to open a project with `work_on_project`).
-
 ### 5. Test and update
 
-- Open the **MCP** menu by the composer, click **Insert** to add MCP Instructions, and send them with a read-only test request. When the model produces a tool card, click **Run** to test it manually before enabling any automatic execution, insertion, or submission.
+- Open the **MCP** menu by the composer, click **Insert** to add MCP Instructions, and send them with a read-only test request (with WebCodex, ask it to list your projects to verify `list_projects`). When the model produces a tool card, click **Run** to test it manually before enabling any automatic execution, insertion, or submission.
 - To update, run `git pull --ff-only`, `pnpm install --frozen-lockfile`, and `pnpm build` in the project directory. Click **Reload** for this extension in `chrome://extensions/` and refresh open chat tabs. If you see `Extension context is invalid`, refresh the chat tab to load the current content script.
 
 ## Known issues

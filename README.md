@@ -127,13 +127,13 @@ pnpm build
 网页 AI（Gemini / AI Studio） ←→ 本浏览器扩展 ←→ 本地 Proxy（SSE） ←→ WebCodex（本地项目）
 ```
 
-按下面 4 步即可接通（以下以本地 WebCodex **0.5.0** 为例）：
+按下面 3 步即可接通（以下以本地 WebCodex **0.5.0** 为例）：
 
-1. **第 1 步：准备好 WebCodex**
+1. **准备好 WebCodex**
    - 启动 WebCodex 服务端（或桌面端）和 Runner，确认界面里显示 Runner **已连接**，并添加好你要让 AI 访问的本地项目目录。
    - 记下 WebCodex 服务的本地端口（下文以默认示例 `60143` 为例，若你改过端口请一并替换）。
 
-2. **第 2 步：生成代理配置文件（二选一）**
+2. **生成代理配置文件（二选一）**
    - **方式 A（推荐，Windows 一键读取并生成）**：先确保已在 WebCodex Desktop 中登录；在 **PowerShell 7**（`pwsh`）里运行下面整段脚本，它会自动查找你本机的 `webcodex-user-token` 文件，并把配置写入 `%LOCALAPPDATA%\mcp-superassistant-webcodex.json`（如果该文件已有其它 MCP 服务，脚本会保留原有条目）：
 
      ```powershell
@@ -185,7 +185,7 @@ pnpm build
      }
      ```
 
-3. **第 3 步：启动代理并在扩展中连接**
+3. **启动代理并在扩展中连接**
    - 如果采用 **方式 A**，运行下面命令启动（或重启）代理并保持窗口开启；如果采用 **方式 B**，把 `--config` 换成你自己的 `./mcp-config.json` 路径：
 
      ```powershell
@@ -194,13 +194,9 @@ pnpm build
 
    - 打开网页侧栏的连接设置，连接类型选 **SSE**，**Server URI** 填 `http://localhost:3006/sse` 后点击 **Connect**。显示 **Connected** 后，切换到 **Tools** 标签页，确认已能看到并勾选 WebCodex 工具（例如 `webcodex.list_projects`、`webcodex.run_shell` 等）。
 
-4. **第 4 步：发一条消息验证**
-   - 在聊天输入框旁的 **MCP** 菜单点击 **Insert** 插入最新的 **MCP Instructions**，随后输入「列出我的 WebCodex 项目」并发送。
-   - 看到模型调用 `list_projects` 并返回项目列表，即表示整套链路已打通（后续可让它用 `work_on_project` 打开具体项目开始工作）。
-
 ### 5. 试跑并更新
 
-- 在聊天输入框旁打开 **MCP** 菜单，点 **Insert** 加入 MCP Instructions。输入一条只读测试请求，连同指令一起发送。模型生成工具卡片后，可以先手动点 **Run** 验证，再按需开启自动执行、插入和发送。
+- 在聊天输入框旁打开 **MCP** 菜单，点 **Insert** 加入 MCP Instructions，再输入一条只读测试请求一起发送（接 WebCodex 时可直接发「列出我的 WebCodex 项目」验证 `list_projects`）。模型生成工具卡片后，先手动点 **Run** 验证，再按需开启自动执行、插入和发送。
 - 更新时，在项目目录执行 `git pull --ff-only`、`pnpm install --frozen-lockfile` 和 `pnpm build`。回到 `chrome://extensions/` 点本扩展的 **重新加载**，再刷新已打开的聊天页。遇到 `Extension context is invalid` 时，也应刷新聊天页重新注入扩展脚本。
 
 ## 已知问题
