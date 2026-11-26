@@ -32,6 +32,12 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## Changelog
 
+### v0.1.4
+
+- **Core tools include required parameters upfront to skip extra lookup rounds.** Frequently used tools now show brief required-parameter hints in the initial prompt, so the model can call common tools directly on the first turn instead of doing an extra schema lookup first.
+- **Fewer file-edit retries caused by broken escapes in shell commands.** Guides the model toward quoted script blocks and literal text replacement, and fixes parser fallback unescaping so regex and newline escapes are no longer mangled.
+- **Fixed Gemini replaying old tool calls when reloading existing chats.** Refreshing or reopening a Gemini chat no longer auto-runs or auto-submits earlier finished or failed tool cards, while manual **Run** clicks still work.
+
 ### v0.1.3
 
 - **Much shorter tool instructions and parameter lookups to save tokens.** The initial instructions now highlight only the most-used core tools while keeping the rest discoverable on demand; returned tool details drop redundant and internal fields, disabled tools are no longer exposed to the model, and an outdated conflicting Gemini example was removed.
@@ -188,4 +194,6 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp
 
 ## License
 
-This build retains the upstream [MIT license](LICENSE) and original copyright notice. Thanks to the authors and contributors of [MCP SuperAssistant](https://github.com/srbhptl39/MCP-SuperAssistant).
+This project (**MCP SuperAssistant G**) and its additions and modifications on the `custom` branch are licensed under the [GNU General Public License v3.0 or later (GPL-3.0-or-later)](LICENSE), Copyright (c) 2026 `andrewngcanton-gif`.
+
+The upstream baseline is derived from [MCP SuperAssistant](https://github.com/srbhptl39/MCP-SuperAssistant) (commit `30bb204`), whose original MIT License and copyright notice are preserved verbatim in [LICENSE-UPSTREAM-MIT](LICENSE-UPSTREAM-MIT). Thanks to the upstream authors and contributors.

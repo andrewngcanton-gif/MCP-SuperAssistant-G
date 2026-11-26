@@ -1,3 +1,6 @@
+// Copyright (c) 2026 andrewngcanton-gif
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import { GeminiAdapter } from '@src/plugins/adapters/gemini.adapter';
 import { inputChips } from '@src/services/input-chips';
 import { automationService } from '@src/services/automation.service';
@@ -17,6 +20,9 @@ import { useUIStore } from '@src/stores/ui.store';
 import { useToolStore } from '@src/stores/tool.store';
 import { useAdapterStore } from '@src/stores/adapter.store';
 import { generateInstructionReminder } from '@src/components/sidebar/Instructions/instructionGeneratorCompact';
+import { renderFunctionCall, renderedFunctionBlocks, processedElements } from '@src/render_prescript/src/renderer/functionBlock';
+import { initializeGeminiTurnGate, resetGeminiTurnGateForTests } from '@src/render_prescript/src/provenance/geminiTurnGate';
+import { getPreviousExecution } from '@src/render_prescript/src/mcpexecute/storage';
 
 declare global {
   interface Window {
@@ -135,6 +141,8 @@ function setupGeminiAdapter(): GeminiAdapter {
 
 async function runTest(name: string, fn: () => Promise<void>) {
   try {
+    localStorage.clear();
+    renderedFunctionBlocks.clear();
     inputChips.teardown();
     automationService.cleanup();
     stopStalledStreamDetection();
@@ -143,14 +151,18 @@ async function runTest(name: string, fn: () => Promise<void>) {
     streamingObservers.forEach(o => o.disconnect());
     streamingObservers.clear();
     streamingLastUpdated.clear();
+    resetGeminiTurnGateForTests();
     await fn();
     results.push({ name, pass: true });
   } catch (err: any) {
     results.push({ name, pass: false, error: err?.stack || String(err) });
   } finally {
+    delete (window as any).mcpClient;
+    delete (window as any).__mcpAutomationState;
     inputChips.teardown();
     automationService.cleanup();
     stopStalledStreamDetection();
+    resetGeminiTurnGateForTests();
   }
 }
 
@@ -310,6 +322,219 @@ async function main() {
     assert(sent === true, 'Expected submitForm to flush and send MCP Reminder');
     assert(page.sentMessages.length === 1, 'Expected 1 sent message');
     assert(page.sentMessages[0].includes('[MCP SuperAssistant reminder]'), 'Sent message must include reminder header');
+  });
+
+  const makeJsonlPre = (blockId: string, name: string, callId: number, command: string, complete = true): HTMLPreElement => {
+    const pre = document.createElement('pre');
+    pre.setAttribute('data-block-id', blockId);
+    const lines = [
+      JSON.stringify({ type: 'function_call_start', name, call_id: callId }),
+      JSON.stringify({ type: 'parameter', key: 'command', value: command }),
+    ];
+    if (complete) {
+      lines.push(JSON.stringify({ type: 'function_call_end', call_id: callId }));
+    }
+    pre.textContent = lines.join('\n');
+    return pre;
+  };
+
+  // Test 7: Gemini historical-conversation replay gate
+  await runTest('Gemini turn gate blocks historical cards across reload/hydration/navigation and allows current turn & live streams', async () => {
+    window.__setMockPath('/app/chat-history');
+    document.body.innerHTML = '';
+
+    let autoExecCalls: Array<{ name: string; command: string }> = [];
+    (window as any).__mcpAutomationState = {
+      autoExecute: true,
+      autoInsert: false,
+      autoSubmit: false,
+      autoDiscovery: true,
+      autoExecuteDelay: 0,
+    };
+    (window as any).mcpClient = {
+      isReady: () => true,
+      callTool: async (name: string, args: any) => {
+        autoExecCalls.push({ name, command: String(args?.command ?? '') });
+        return 'ok';
+      },
+    };
+
+    // Mount existing history BEFORE initializeGeminiTurnGate + render
+    const oldTurn1 = document.createElement('model-response');
+    const preOld1 = makeJsonlPre('hist-1', 'run_shell', 38, 'pnpm -F @extension/content-script type-check');
+    oldTurn1.appendChild(preOld1);
+    const userQuery1 = document.createElement('user-query');
+    userQuery1.textContent = 'Earlier question';
+    document.body.append(oldTurn1, userQuery1);
+
+    initializeGeminiTurnGate();
+    resetGeminiTurnGateForTests();
+
+    assert(renderFunctionCall(preOld1, { current: false }), 'hist-1 should render');
+
+    // Late-hydrated historical final response (including incremental partial->complete hydration WITHOUT Stop button)
+    const lateHistTurn = document.createElement('model-response');
+    const preLateHist = makeJsonlPre('hist-2', 'run_shell', 39, 'echo late-history', false);
+    lateHistTurn.appendChild(preLateHist);
+    document.body.appendChild(lateHistTurn);
+    assert(renderFunctionCall(preLateHist, { current: false }), 'hist-2 partial should render');
+    preLateHist.textContent = makeJsonlPre('hist-2', 'run_shell', 39, 'echo late-history', true).textContent;
+    assert(renderFunctionCall(preLateHist, { current: false }), 'hist-2 complete should render');
+
+    await sleep(750);
+    assert(autoExecCalls.length === 0, `Historical Gemini cards must not auto-execute, got ${autoExecCalls.length}`);
+
+    // Manual Run click still works on historical card, without dispatching auto-delivery events into chat
+    let completionEvents = 0;
+    const onComplete = () => {
+      completionEvents++;
+    };
+    document.addEventListener('mcp:tool-execution-complete', onComplete);
+    const manualBtn = document.querySelector<HTMLButtonElement>('.function-block[data-block-id="hist-1"] .execute-button');
+    assert(manualBtn !== null, 'hist-1 must have manual Run button');
+    manualBtn!.click();
+    await sleep(50);
+    document.removeEventListener('mcp:tool-execution-complete', onComplete);
+    assert(autoExecCalls.length === 1 && autoExecCalls[0].command.includes('type-check'), 'Manual click on historical card must execute');
+    assert(completionEvents === 0, `Manual Run on historical Gemini card must not auto-deliver, got ${completionEvents} event(s)`);
+
+    // Navigate to /app (new chat), submit prompt (via trusted Enter), migrate /app -> /app/new-123
+    autoExecCalls = [];
+    window.__setMockPath('/app');
+    const page = mountGeminiDom();
+    const adapter = setupGeminiAdapter();
+    page.editor.textContent = 'Run new task';
+    const enterEv = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    page.editor.dispatchEvent(enterEv);
+
+    window.__setMockPath('/app/new-123');
+    const oldInsertedBeforeLatest = document.createElement('model-response');
+    const prePrior = makeJsonlPre('prior-in-chat', 'run_shell', 40, 'echo prior-turn');
+    oldInsertedBeforeLatest.appendChild(prePrior);
+    const latestUserQuery = document.createElement('user-query');
+    latestUserQuery.textContent = 'Run new task';
+    const currentResponse = document.createElement('model-response');
+    const preCurrent = makeJsonlPre('cur-1', 'run_shell', 41, 'echo current-turn');
+    currentResponse.appendChild(preCurrent);
+    document.body.append(oldInsertedBeforeLatest, latestUserQuery, currentResponse);
+
+    renderFunctionCall(prePrior, { current: false });
+    renderFunctionCall(preCurrent, { current: false });
+    await sleep(750);
+    assert(
+      autoExecCalls.length === 1 && autoExecCalls[0].command === 'echo current-turn',
+      `Only current-turn card should auto-execute, got ${JSON.stringify(autoExecCalls)}`,
+    );
+
+    // Navigating to a different conversation disarms the gate and blocks its cards
+    autoExecCalls = [];
+    window.__setMockPath('/app/other-456');
+    const otherChatResponse = document.createElement('model-response');
+    const preOther = makeJsonlPre('other-1', 'run_shell', 42, 'echo other-chat');
+    otherChatResponse.appendChild(preOther);
+    document.body.appendChild(otherChatResponse);
+    renderFunctionCall(preOther, { current: false });
+    await sleep(750);
+    assert(autoExecCalls.length === 0, 'Cards in another conversation after navigation must not auto-execute');
+
+    // Live-streaming regeneration (incomplete -> complete with visible Stop button) without composer send still auto-executes
+    autoExecCalls = [];
+    const regenStop = document.createElement('button');
+    regenStop.className = 'stop-button';
+    regenStop.setAttribute('aria-label', 'Stop generating');
+    Object.assign(regenStop.style, { width: '36px', height: '36px', display: 'inline-block' });
+    document.body.appendChild(regenStop);
+    const regenResponse = document.createElement('model-response');
+    const preRegen = makeJsonlPre('regen-1', 'run_shell', 43, 'echo live-regen', false);
+    regenResponse.appendChild(preRegen);
+    document.body.appendChild(regenResponse);
+    renderFunctionCall(preRegen, { current: false });
+    preRegen.textContent = makeJsonlPre('regen-1', 'run_shell', 43, 'echo live-regen', true).textContent;
+    regenStop.remove();
+    renderFunctionCall(preRegen, { current: false });
+    await sleep(750);
+    assert(
+      autoExecCalls.length === 1 && autoExecCalls[0].command === 'echo live-regen',
+      `Live streaming regeneration should auto-execute, got ${JSON.stringify(autoExecCalls)}`,
+    );
+    void adapter;
+  });
+
+  // Test 8: Failed mcpClient.callTool invocation is recorded in storeExecutedFunction while pre-flight !isReady() and context-invalid errors are not
+  await runTest('Failed callTool execution is persisted in execution history while pre-flight !isReady and context-invalid are not', async () => {
+    window.__setMockPath('/app/chat-fail-history');
+    document.body.innerHTML = '';
+    (window as any).__mcpAutomationState = {
+      autoExecute: false,
+      autoInsert: false,
+      autoSubmit: false,
+      autoDiscovery: false,
+    };
+
+    const preFail = makeJsonlPre('fail-1', 'run_shell', 50, 'echo fail-me');
+    const preNotReady = makeJsonlPre('notready-1', 'run_shell', 51, 'echo not-ready');
+    const preCtxInvalid = makeJsonlPre('ctxinvalid-1', 'run_shell', 52, 'echo ctx-invalid');
+    document.body.append(preFail, preNotReady, preCtxInvalid);
+
+    renderFunctionCall(preFail, { current: false });
+    renderFunctionCall(preNotReady, { current: false });
+    renderFunctionCall(preCtxInvalid, { current: false });
+
+    (window as any).mcpClient = {
+      isReady: () => true,
+      callTool: async () => {
+        throw new Error('Command exited with status 1');
+      },
+    };
+    const failBtn = document.querySelector<HTMLButtonElement>('.function-block[data-block-id="fail-1"] .execute-button');
+    assert(failBtn !== null, 'fail-1 Run button must exist');
+    failBtn!.click();
+    await sleep(50);
+
+    const failCard = document.querySelector('.function-block[data-block-id="fail-1"]');
+    assert(failCard?.classList.contains('exec-error'), 'fail-1 should be marked exec-error');
+
+    const recordedFail = getPreviousExecution('run_shell', '50', '');
+    // Verify via storage key scan using actual computed signature
+    const rawHistory = JSON.parse(localStorage.getItem('mcp_url_based_function_history') || '{}');
+    const bucket = rawHistory[window.location.href] || {};
+    const failEntries = Object.values(bucket).filter((e: any) => e.functionName === 'run_shell' && e.callId === '50');
+    assert(failEntries.length === 1, `Expected failed call_id=50 to be stored in execution history, got ${failEntries.length}`);
+    void recordedFail;
+
+    let ctxEvents = 0;
+    const onCtxComplete = () => {
+      ctxEvents++;
+    };
+    document.addEventListener('mcp:tool-execution-complete', onCtxComplete);
+    (window as any).mcpClient = {
+      isReady: () => true,
+      callTool: async () => {
+        throw new Error('Extension context is invalid - cannot send message');
+      },
+    };
+    const ctxBtn = document.querySelector<HTMLButtonElement>('.function-block[data-block-id="ctxinvalid-1"] .execute-button');
+    assert(ctxBtn !== null, 'ctxinvalid-1 Run button must exist');
+    ctxBtn!.click();
+    await sleep(50);
+    document.removeEventListener('mcp:tool-execution-complete', onCtxComplete);
+    assert(ctxEvents === 0, `Context-invalid error must not dispatch completion event, got ${ctxEvents}`);
+
+    (window as any).mcpClient = {
+      isReady: () => false,
+      callTool: async () => 'should not run',
+    };
+    const notReadyBtn = document.querySelector<HTMLButtonElement>('.function-block[data-block-id="notready-1"] .execute-button');
+    assert(notReadyBtn !== null, 'notready-1 Run button must exist');
+    notReadyBtn!.click();
+    await sleep(50);
+
+    const rawAfter = JSON.parse(localStorage.getItem('mcp_url_based_function_history') || '{}');
+    const bucketAfter = rawAfter[window.location.href] || {};
+    const notReadyEntries = Object.values(bucketAfter).filter(
+      (e: any) => e.functionName === 'run_shell' && (e.callId === '51' || e.callId === '52'),
+    );
+    assert(notReadyEntries.length === 0, 'Pre-flight !isReady and context-invalid exits must not be stored in execution history');
   });
 
   window.__testResults = results;

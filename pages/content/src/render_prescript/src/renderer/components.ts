@@ -14,6 +14,7 @@ import {
   registerAistudioInvocation,
   type AistudioProvenance,
 } from '../provenance/aistudioTurnGate';
+import { canGeminiAutoExecute, isGeminiHost } from '../provenance/geminiTurnGate';
 
 // Add type declarations for the global adapter and mcpClient access
 
@@ -106,6 +107,9 @@ function adapterSupportsCapability(capability: string): boolean {
 // Performance optimizations: Cache constants and pre-compile regexes
 const MAX_INSERT_LENGTH = 39000;
 const MAX_RESULT_DISPLAY_CHARS = 20000; // ponytail: hard display cap; raw text stays intact for insert/copy
+
+const isExtensionContextInvalidError = (message: string): boolean =>
+  /extension context (?:is )?invalid/i.test(message);
 
 const formatDuration = (ms: number): string => (ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`);
 const WEBSITE_NAME_FOR_MAX_INSERT_LENGTH_CHECK = ['perplexity'];
@@ -504,6 +508,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
       }
 
       logger.debug(`Executing function ${functionName}, call_id: ${callId} with arguments:`, parameters);
+      const isHistoricalGeminiCard = isGeminiHost() && !canGeminiAutoExecute(fnBlock);
 
       // Show results panel and loading indicator
       resultsPanel.style.display = 'block';
@@ -520,6 +525,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
         displayResult(resultsPanel, loadingIndicator, true, result, performance.now() - t0, {
           provenance,
           invocationId,
+          skipAutoDelivery: isHistoricalGeminiCard,
         });
 
         // Store execution and update history efficiently
@@ -545,11 +551,32 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
           errorMessage = 'MCP server is unavailable. Please check the server status.';
         }
 
+        const isContextInvalid = isExtensionContextInvalidError(errorMessage);
+
         setStatus('error');
         displayResult(resultsPanel, loadingIndicator, false, errorMessage, performance.now() - t0, {
           provenance,
           invocationId,
+          skipAutoDelivery: isHistoricalGeminiCard || isContextInvalid,
         });
+
+        // Invalidated extension contexts (e.g. tab not refreshed after extension reload) should
+        // display locally without persisting history or dispatching auto-submit events into chat.
+        if (isContextInvalid) {
+          return;
+        }
+
+        // Persist failed callTool attempts that report ERROR back to the model so page reloads
+        // cannot treat them as unexecuted history and replay them automatically.
+        try {
+          storeExecutedFunction(functionName, callId, parameters, contentSignature);
+        } catch {
+          // Storage quota/errors should never block returning ERROR to the model.
+        }
+
+        if (isHistoricalGeminiCard) {
+          return;
+        }
 
         // Return the failure to the model too, as its own tool-result chip, so a
         // partially-failing multi-call batch still reports every call's outcome.
@@ -1068,7 +1095,7 @@ export const displayResult = (
   success: boolean,
   result: any,
   durationMs?: number,
-  delivery?: { provenance?: AistudioProvenance | null; invocationId?: string | null },
+  delivery?: { provenance?: AistudioProvenance | null; invocationId?: string | null; skipAutoDelivery?: boolean },
 ): void => {
   // Cache attributes for performance
   const callId = resultsPanel.getAttribute('data-call-id') || '';
@@ -1491,6 +1518,10 @@ export const displayResult = (
     resultsPanel.parentNode?.insertBefore(fragment, resultsPanel.nextSibling);
 
     // Handle auto-attachment for large results
+    if (delivery?.skipAutoDelivery) {
+      return;
+    }
+
     if (
       rawResultText.length > MAX_INSERT_LENGTH &&
       adapter && adapterSupportsCapability('file-attachment') &&

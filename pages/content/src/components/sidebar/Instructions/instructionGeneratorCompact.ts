@@ -55,6 +55,80 @@ export const oneLiner = (d?: string, maxLen = 58): string => {
   return cut.replace(/[,;:\-]+$/, '') + '…';
 };
 
+const INTERNAL_SCHEMA_KEYS = new Set<string>(['_wc']);
+
+const formatCompactTypeHint = (propSchema: unknown): string => {
+  if (!propSchema || typeof propSchema !== 'object' || Array.isArray(propSchema)) return '';
+  const prop = propSchema as Record<string, unknown>;
+  const rawType = Array.isArray(prop.type)
+    ? prop.type.find(t => t !== 'null')
+    : prop.type;
+
+  switch (rawType) {
+    case 'boolean':
+      return 'bool';
+    case 'integer':
+      return 'int';
+    case 'number':
+      return 'num';
+    case 'object':
+      return 'object';
+    case 'array': {
+      const items = prop.items;
+      const itemType =
+        items && typeof items === 'object' && !Array.isArray(items)
+          ? (items as Record<string, unknown>).type
+          : undefined;
+      if (itemType === 'object') return 'object[]';
+      if (itemType === 'string') return 'string[]';
+      return 'array';
+    }
+    case 'string':
+    default:
+      return '';
+  }
+};
+
+/**
+ * Format an ultra-compact required-parameter signature such as `()` or `(project, command)`
+ * from a tool's JSON Schema string/object, omitting internal transport keys (`_wc`).
+ * Returns `''` when the schema lacks object structure (e.g. `{}` or invalid JSON).
+ */
+export const formatCompactParamSignature = (schema?: string | Record<string, unknown>): string => {
+  if (!schema) return '';
+  let parsed: unknown = schema;
+  if (typeof schema === 'string') {
+    const trimmed = schema.trim();
+    if (!trimmed) return '';
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      return '';
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '';
+
+  const obj = parsed as Record<string, unknown>;
+  const props =
+    obj.properties && typeof obj.properties === 'object' && !Array.isArray(obj.properties)
+      ? (obj.properties as Record<string, unknown>)
+      : null;
+  const req = Array.isArray(obj.required) ? obj.required : null;
+  if (obj.type !== 'object' && !props && !req) return '';
+
+  const requiredNames = (req ?? [])
+    .filter((name): name is string => typeof name === 'string' && !INTERNAL_SCHEMA_KEYS.has(name));
+  if (requiredNames.length === 0) return '()';
+
+  const maxParams = 5;
+  const formatted = requiredNames.slice(0, maxParams).map(name => {
+    const hint = props ? formatCompactTypeHint(props[name]) : '';
+    return hint ? `${name}: ${hint}` : name;
+  });
+  if (requiredNames.length > maxParams) formatted.push('…');
+  return `(${formatted.join(', ')})`;
+};
+
 const splitToolNamespace = (name: string): { prefix: string; base: string } => {
   const dotIdx = name.indexOf('.');
   if (dotIdx > 0) return { prefix: name.slice(0, dotIdx + 1), base: name.slice(dotIdx + 1) };
@@ -234,7 +308,9 @@ export const generateInstructionsCompact = (
   }
 
   const { core, deferredGroups } = partitionToolsForCompactIndex(tools);
-  const coreIndex = core.map(tool => `- ${tool.name} — ${oneLiner(tool.description)}`).join('\n');
+  const coreIndex = core
+    .map(tool => `- ${tool.name}${formatCompactParamSignature(tool.schema)} — ${oneLiner(tool.description)}`)
+    .join('\n');
   const deferredSection = formatDeferredGroups(deferredGroups);
   const index = deferredSection ? `${coreIndex}\n${deferredSection}` : coreIndex;
 
@@ -263,8 +339,8 @@ TOOL INDEX (core + on-demand)
 ${index}
 
 DISCOVERY
-- get_tool_schema: names: ["exact.tool_name", ...] to fetch schemas when unsure.
-- tool_lookup: query: "keyword" (or "" to list all enabled tools).`;
+- Call core tools directly; use get_tool_schema(names: ["..."]) only when unlisted or unclear.
+- tool_lookup(query: "keyword" | "").`;
 
   const rtkSection = useRtkWithWebCodex ? buildRtkInstructions(tools) : '';
   const mechanicsWithRtk = rtkSection ? `${mechanics}\n\n${rtkSection}` : mechanics;

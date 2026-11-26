@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) 2026 andrewngcanton-gif
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * Generate a proxy config from a managed input that contains the existing
  * mcpServers entries plus an optional crewdispatch toggle.

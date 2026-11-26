@@ -1,3 +1,6 @@
+// Copyright (c) 2026 andrewngcanton-gif
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';

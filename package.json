@@ -2,7 +2,7 @@
   "name": "mcp-superassistant",
   "version": "0.7.3",
   "description": "MCP SuperAssistant",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "private": true,
   "sideEffects": false,
   "repository": {
@@ -17,7 +17,7 @@
     "clean": "pnpm clean:bundle && pnpm clean:turbo && pnpm clean:node_modules",
     "clean:install": "pnpm clean:node_modules && pnpm install --frozen-lockfile",
     "type-check": "turbo type-check",
-    "test:unit": "pnpm dlx tsx --test pages/content/src/components/sidebar/Instructions/instructionGeneratorCompact.test.ts pages/content/src/core/metaTools.test.ts pages/content/src/stores/toolEnablement.test.ts chrome-extension/utils/telemetry-core.test.ts",
+    "test:unit": "pnpm dlx tsx --test pages/content/src/components/sidebar/Instructions/instructionGeneratorCompact.test.ts pages/content/src/core/metaTools.test.ts pages/content/src/stores/toolEnablement.test.ts chrome-extension/utils/telemetry-core.test.ts pages/content/src/render_prescript/src/parser/jsonFunctionParser.test.ts",
     "test:dom": "node scripts/dom-tests/run.mjs",
     "base-build": "pnpm clean:bundle && turbo build",
     "build": "pnpm set-global-env && pnpm base-build",

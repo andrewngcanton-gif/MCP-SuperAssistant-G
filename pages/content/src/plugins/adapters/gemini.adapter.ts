@@ -3,6 +3,7 @@ import type { AdapterCapability, PluginContext, ChipAnchors } from '../plugin-ty
 import { adapterConfigManager, type AdapterConfig } from './defaultConfigs';
 import { createLogger } from '@extension/shared/lib/logger';
 import { inputChips } from '../../services/input-chips';
+import { notifyGeminiSubmission } from '../../render_prescript/src/provenance/geminiTurnGate';
 
 /**
  * Gemini Adapter for Google Gemini (gemini.google.com)
@@ -407,6 +408,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
             if (lateChange) return this.abortSubmit(`Composer changed before click (${lateChange})`);
             if (options?.canProceed && !options.canProceed()) return this.abortSubmit('Original composer changed before click');
 
+            notifyGeminiSubmission();
             submitButton.click();
             this.emitExecutionCompleted('submitForm', {
               formElement: options?.formElement?.tagName || 'unknown'

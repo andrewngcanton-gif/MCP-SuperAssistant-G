@@ -1,3 +1,6 @@
+// Copyright (c) 2026 andrewngcanton-gif
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // pages/content/src/components/sidebar/Instructions/instructionsState.ts
 import { createLogger } from '@extension/shared/lib/logger';
 

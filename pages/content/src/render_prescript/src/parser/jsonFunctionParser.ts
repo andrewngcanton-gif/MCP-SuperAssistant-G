@@ -585,6 +585,34 @@ export const extractJSONFunctionInfo = (
   return { functionName, callId, description };
 };
 
+export const unescapePartialJsonString = (raw: string): string =>
+  raw.replace(/\\(?:u([0-9a-fA-F]{4})|(.))/g, (_match, hex: string | undefined, ch: string | undefined) => {
+    if (hex !== undefined) {
+      return String.fromCharCode(parseInt(hex, 16));
+    }
+    switch (ch) {
+      case 'n':
+        return '\n';
+      case 'r':
+        return '\r';
+      case 't':
+        return '\t';
+      case 'b':
+        return '\b';
+      case 'f':
+        return '\f';
+      case '"':
+        return '"';
+      case '\\':
+        return '\\';
+      case '/':
+        return '/';
+      default:
+        // Preserve non-JSON regex escapes (e.g. \s, \d, \w, \.) verbatim instead of eating the backslash.
+        return `\\${ch}`;
+    }
+  });
+
 /**
  * Extract parameters from JSON function calls
  */
@@ -625,13 +653,7 @@ export const extractJSONParameters = (content: string): Record<string, any> => {
     // Only use regex-extracted value if we don't already have this parameter
     // (prefer complete values from successfully parsed JSON lines)
     if (!parameters.hasOwnProperty(key)) {
-      // Unescape the value (handle \n, \t, \", etc.)
-      const unescapedValue = value
-        .replace(/\\n/g, '\n')
-        .replace(/\\t/g, '\t')
-        .replace(/\\r/g, '\r')
-        .replace(/\\"/g, '"')
-        .replace(/\\\\/g, '\\');
+      const unescapedValue = unescapePartialJsonString(value);
 
       parameters[key] = unescapedValue;
 

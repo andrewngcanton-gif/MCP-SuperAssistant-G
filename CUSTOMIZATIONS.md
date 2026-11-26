@@ -44,6 +44,19 @@ After changing the toggle, re-run the generator and restart the proxy; the runni
 
 Detailed implementation-level notes for each release and fix. User-facing summaries live in [README.md](README.md) and [README.en.md](README.en.md).
 
+### v0.1.4
+
+- **Preserved regex & newline escapes in `run_shell` tool calls (`jsonFunctionParser.ts`, `webcodexInstructions.ts`).**
+  - Root cause: When a `parameter` JSONL line failed `JSON.parse()` (e.g., due to non-JSON regex escapes such as `\s` or `\d`) and fell back to regex extraction in `extractJSONParameters()`, chained replacements replaced `\\n` before `\\\\`, corrupting literal `\r?\n` into `\` + newline. Models also frequently triggered shell/JSON triple-escaping failures with inline regex scripts.
+  - Fix: Added single-pass `unescapePartialJsonString()` preserving non-JSON regex escapes (`\s`, `\d`, etc.) and decoding `\\n` strictly as literal `\n`, and updated `buildWebCodexFileEditGuidance()` to steer `run_shell` edits toward single-quoted heredocs (`<<'EOF'` / `@'...'@`) and literal `replace`/`split`/`join`.
+- **Prevented historical tool-call replay on Gemini and persisted failed tool attempts (`geminiTurnGate.ts`, `functionBlock.ts`, `index.ts`, `gemini.adapter.ts`, `components.ts`).**
+  - Root cause: Unlike AI Studio (`aistudioTurnGate.ts`), Gemini relied solely on URL-keyed `localStorage` history, and `components.ts` only called `storeExecutedFunction()` on success. Reloading an existing Gemini chat could replay an earlier failed/timed-out or evicted card automatically and send its result into the chat; additionally, orphaned content scripts (before refreshing an already-open tab after extension reload) could still auto-run local meta-tools and emit `ERROR: Extension context is invalid` back to chat, and Angular hydration without a Stop button could resemble incremental streaming.
+  - Fix: Added `geminiTurnGate.ts` (`initializeGeminiTurnGate`, `notifyGeminiSubmission`, `observeGeminiBlock`, `canGeminiAutoExecute`) requiring `armed || hasVisibleGeminiStopControl()` before treating partial blocks as live streams so existing/late-hydrated/prior-turn Gemini cards require manual `Run` while armed user sends (including `/app` → `/app/<id>` first-send migration) and live-streaming regenerations auto-execute as expected; added `isExtensionContextAlive()` in `functionBlock.ts` and `skipAutoDelivery` / `isExtensionContextInvalidError()` guards in `components.ts` (suppressing auto-delivery on manual historical Gemini runs and invalidated contexts); and persisted failed `mcpClient.callTool()` attempts (excluding pre-flight `!isReady()` and context-invalid exits) in `storeExecutedFunction()`.
+- **Unit & DOM regression coverage (`jsonFunctionParser.test.ts`, `instructionGeneratorCompact.test.ts`, `scripts/dom-tests/gemini.test.ts`).**
+  - Added unit tests for `unescapePartialJsonString()` and fallback extraction, verified Compact prompt length stays `< 2,400` chars with the heredoc hint, and added Gemini DOM tests for historical-replay blocking and failed-call persistence.
+- **Inline required-parameter signatures for Compact core tools (`instructionGeneratorCompact.ts`).**
+  - Added `formatCompactParamSignature()` to append concise required-parameter signatures such as `()` or `(project, command)` (stripping internal `_wc` keys and annotating non-string types like `object[]`, `int`, `bool`) to the inlined core tools, and updated `DISCOVERY` to direct calling core tools immediately without a redundant Turn-1 `get_tool_schema` round-trip.
+
 ### v0.1.3
 
 - **Tiered Compact MCP instructions, Gemini conflict removal, and long-chat `Remind` (`instructionGeneratorCompact.ts`, `instructionPipeline.ts`, `website_specific_instruction/gemini.ts`, `webcodexInstructions.ts`, `rtkInstructions.ts`).**
@@ -90,7 +103,9 @@ Detailed implementation-level notes for each release and fix. User-facing summar
 
 ## License
 
-The upstream project is distributed under the MIT License. The original LICENSE file and copyright notice are retained.
+MCP SuperAssistant G (the integrated derivative work and all additions/modifications on `custom`) is licensed under the GNU General Public License v3.0 or later (`GPL-3.0-or-later`; full text in [LICENSE](LICENSE)), Copyright (c) 2026 `andrewngcanton-gif`.
+
+The upstream baseline (`main`, commit `30bb204`) is derived from MCP SuperAssistant under the MIT License; its original license text and copyright notice are preserved in [LICENSE-UPSTREAM-MIT](LICENSE-UPSTREAM-MIT). Newly added project modules carry `Copyright (c) 2026 andrewngcanton-gif` and `SPDX-License-Identifier: GPL-3.0-or-later` headers.
 
 ## Repository branches
 

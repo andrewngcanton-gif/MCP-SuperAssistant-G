@@ -32,6 +32,12 @@
 
 ## 更新记录
 
+### v0.1.4
+
+- **常用工具首轮自带必填参数，省掉额外查参数往返。** 新开对话时，高频工具会直接附上简单的必填参数提示，模型第一轮就能直接调用常用工具，不必先多跑一轮查参数。
+- **减少改文件时的转义报错与重试。** 提示模型在终端命令里优先使用整段代码块和直接文本替换来改文件，并修复长脚本里换行和正则符号容易被吃掉的问题。
+- **修复刷新 Gemini 老对话时误重跑旧工具调用。** 重新打开或刷新已有对话时，之前跑过或报错过的旧工具卡片不再自动执行和自动发送，仍可随时手动点击 **Run** 查看结果。
+
 ### v0.1.3
 
 - **大幅精简工具说明，节省 token。** 首次发送工具说明时只展开最常用的核心工具，其余工具按需再查；查询工具参数时也去掉了冗余和内部字段，已关闭的工具不再暴露给模型，并移除了 Gemini 下容易引起冲突的旧示例。
@@ -188,4 +194,6 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp
 
 ## 许可证
 
-本项目沿用上游的 [MIT 许可证](LICENSE)，保留原版权声明。感谢 [MCP SuperAssistant](https://github.com/srbhptl39/MCP-SuperAssistant) 的作者和贡献者。
+本项目（**MCP SuperAssistant G**）及其在 `custom` 分支上的新增与修改代码采用 [GNU 通用公共许可证 v3.0 或更高版本（GPL-3.0-or-later）](LICENSE) 发布，版权归 `andrewngcanton-gif` 所有。
+
+上游基线代码来自 [MCP SuperAssistant](https://github.com/srbhptl39/MCP-SuperAssistant)（原版提交 `30bb204`），其原始 MIT 许可证与版权声明完整保留在 [LICENSE-UPSTREAM-MIT](LICENSE-UPSTREAM-MIT) 中。感谢原作者和社区贡献者。

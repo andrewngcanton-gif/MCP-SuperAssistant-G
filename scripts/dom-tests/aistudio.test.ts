@@ -1,3 +1,6 @@
+// Copyright (c) 2026 andrewngcanton-gif
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import {
   __getAistudioGateStateForTests,
   __resetAistudioTurnGateForTests,

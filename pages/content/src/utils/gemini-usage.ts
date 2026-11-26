@@ -1,3 +1,6 @@
+// Copyright (c) 2026 andrewngcanton-gif
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * Gemini account/usage pages (e.g. /usage, /u/0/usage) are ordinary web pages, not chat
  * documents. The extension still runs there, but the chat sidebar does not belong in that

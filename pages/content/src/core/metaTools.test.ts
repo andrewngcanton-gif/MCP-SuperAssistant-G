@@ -1,3 +1,6 @@
+// Copyright (c) 2026 andrewngcanton-gif
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Run: pnpm dlx tsx --test pages/content/src/core/metaTools.test.ts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 andrewngcanton-gif
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * Concise, always-on WebCodex file-edit guidance for the initial instructions.
  *
@@ -84,7 +87,7 @@ export const buildWebCodexFileEditGuidance = (tools: AdvertisedTool[] | undefine
 
   const core = `\`${names.editProjectFiles}\` requires nested JSON (\`project\`, \`changes\` with \`kind\`+\`path\`). Skip it for multiline, quote-heavy, or angle-bracket edits, and never retry after an error.`;
   const fallback = names.runShell
-    ? `Use \`${names.runShell}\` with a short Python/PowerShell script to edit in one step (within project permissions/scope); if unavailable, stop and report.`
+    ? `Use \`${names.runShell}\` via single-quoted \`<<'EOF'\`/\`@'...'@\` and literal \`replace\`/\`split\`/\`join\` (no inline escaped regexes; within project scope); if unavailable, stop and report.`
     : `No WebCodex \`run_shell\` is available; stop and report instead of inventing tools (within project permissions/scope).`;
 
   return `WEBCODEX FILE EDITS

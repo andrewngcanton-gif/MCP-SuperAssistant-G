@@ -1,7 +1,11 @@
+// Copyright (c) 2026 andrewngcanton-gif
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Run: pnpm dlx tsx --test pages/content/src/components/sidebar/Instructions/instructionGeneratorCompact.test.ts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  formatCompactParamSignature,
   generateInstructionReminder,
   generateInstructionsCompact,
   oneLiner,
@@ -65,6 +69,7 @@ test('generateInstructionsCompact stays lean on Gemini and avoids legacy json fe
     assert.ok(!out.includes('```json\n'));
     assert.ok(out.includes('listed or tool_lookup tools'));
     assert.ok(out.includes('More webcodex.* (12):'));
+    assert.ok(out.includes("<<'EOF'") && out.includes("@'...'@"));
   } finally {
     (globalThis as any).location = prevLocation;
   }
@@ -85,4 +90,87 @@ test('generateInstructionReminder handles empty tools and optional RTK hint', ()
   assert.ok(withRtk.includes('RTK:'));
   assert.ok(withRtk.includes('webcodex.run_process'));
   assert.ok(withRtk.length < 850, `expected reminder with RTK < 850 chars, got ${withRtk.length}`);
+});
+
+test('formatCompactParamSignature extracts concise required signatures while stripping _wc', () => {
+  assert.equal(formatCompactParamSignature(''), '');
+  assert.equal(formatCompactParamSignature('{}'), '');
+  assert.equal(formatCompactParamSignature('invalid json'), '');
+  assert.equal(
+    formatCompactParamSignature(JSON.stringify({ type: 'object', properties: { query: { type: 'string' } } })),
+    '()',
+  );
+  assert.equal(
+    formatCompactParamSignature(
+      JSON.stringify({
+        type: 'object',
+        properties: {
+          project: { type: 'string' },
+          command: { type: ['string', 'null'] },
+          _wc: { type: 'object' },
+        },
+        required: ['project', 'command', '_wc'],
+      }),
+    ),
+    '(project, command)',
+  );
+  assert.equal(
+    formatCompactParamSignature(
+      JSON.stringify({
+        type: 'object',
+        properties: {
+          files: { type: 'array', items: { type: 'object' } },
+          paths: { type: 'array', items: { type: 'string' } },
+          limit: { type: 'integer' },
+          dry_run: { type: 'boolean' },
+          opts: { type: 'object' },
+          extra: { type: 'number' },
+        },
+        required: ['files', 'paths', 'limit', 'dry_run', 'opts', 'extra'],
+      }),
+    ),
+    '(files: object[], paths: string[], limit: int, dry_run: bool, opts: object, …)',
+  );
+});
+
+test('generateInstructionsCompact includes inline core signatures to skip Turn-1 schema lookup', () => {
+  const tools = makeWebCodexTools().map(tool => {
+    if (tool.name === 'webcodex.list_projects') {
+      return { ...tool, schema: JSON.stringify({ type: 'object', properties: { query: { type: 'string' } } }) };
+    }
+    if (tool.name === 'webcodex.work_on_project') {
+      return {
+        ...tool,
+        schema: JSON.stringify({ type: 'object', properties: { project: { type: 'string' } }, required: ['project'] }),
+      };
+    }
+    if (tool.name === 'webcodex.run_shell') {
+      return {
+        ...tool,
+        schema: JSON.stringify({
+          type: 'object',
+          properties: { project: { type: 'string' }, command: { type: 'string' }, _wc: { type: 'object' } },
+          required: ['project', 'command', '_wc'],
+        }),
+      };
+    }
+    if (tool.name === 'webcodex.read_files') {
+      return {
+        ...tool,
+        schema: JSON.stringify({
+          type: 'object',
+          properties: { project: { type: 'string' }, files: { type: 'array', items: { type: 'object' } } },
+          required: ['project', 'files'],
+        }),
+      };
+    }
+    return tool;
+  });
+  const out = generateInstructionsCompact(tools, '', false, false);
+  assert.ok(out.includes('webcodex.list_projects() —'));
+  assert.ok(out.includes('webcodex.work_on_project(project) —'));
+  assert.ok(out.includes('webcodex.run_shell(project, command) —'));
+  assert.ok(out.includes('webcodex.read_files(project, files: object[]) —'));
+  assert.ok(out.includes('Call core tools directly;'));
+  assert.ok(out.length < 2500, `expected compact prompt with signatures < 2500 chars, got ${out.length}`);
 });

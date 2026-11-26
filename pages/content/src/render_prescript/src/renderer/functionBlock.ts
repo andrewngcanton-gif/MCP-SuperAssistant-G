@@ -25,6 +25,11 @@ import {
   releaseAistudioAutomaticInvocation,
   type AistudioProvenance,
 } from '../provenance/aistudioTurnGate';
+import {
+  canGeminiAutoExecute,
+  isGeminiHost,
+  observeGeminiBlock,
+} from '../provenance/geminiTurnGate';
 
 // Define custom property for tracking scroll state
 
@@ -168,16 +173,30 @@ function getAutomationState() {
 const isMetaTool = (functionName: string): boolean =>
   functionName === 'get_tool_schema' || functionName === 'tool_lookup';
 
+const isExtensionContextAlive = (): boolean => {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getManifest === 'function') {
+      if (!chrome.runtime.id) return false;
+      chrome.runtime.getManifest();
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Synchronous eligibility used at the schedule boundary and again immediately before each click.
  * On AI Studio the call must still belong to the current submission turn and the tool must still
  * be enabled. Other hosts keep their existing behavior.
  */
 const canAutoExecuteNow = (block: HTMLElement | null, details: { functionName: string; provenance?: AistudioProvenance | null }): boolean => {
+  if (!isExtensionContextAlive()) return false;
   const automationState = getAutomationState();
   const settingOn = automationState.autoExecute || (isMetaTool(details.functionName) && automationState.autoDiscovery);
   if (!settingOn) return false;
 
+  if (isGeminiHost()) return canGeminiAutoExecute(block);
   if (!isAistudioHost()) return true;
   if (!isAistudioAutomaticActionEnabled(details.functionName)) return false;
   if (!details.provenance || !isAistudioProvenanceCurrent(details.provenance)) return false;
@@ -1501,6 +1520,8 @@ const renderCard = (
     elementQueryCache.set(blockDiv, { ...cachedElements, lastCacheTime: Date.now() });
   }
 
+  observeGeminiBlock(block, isComplete, isPreExistingIncomplete);
+
   if (isComplete) {
     if (!blockDiv.querySelector('.raw-toggle')) {
       addRawXmlToggle(expandableContent ?? buttonContainer!, rawContent);
@@ -1531,6 +1552,10 @@ const renderCard = (
         // cards remain visible and manually runnable.
         if (isAistudioHost() && (!provenance || !isAistudioAutomaticActionEnabled(functionName))) {
           logger.debug(`Auto-execution blocked for non-current AI Studio turn ${cardId} (${functionName})`);
+          return;
+        }
+        if (isGeminiHost() && !canGeminiAutoExecute(block)) {
+          logger.debug(`Auto-execution blocked for historical Gemini turn ${cardId} (${functionName})`);
           return;
         }
         if (executionTracker.isBlockExecuted(cardId) === true) {
@@ -1918,6 +1943,8 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
     elementQueryCache.set(blockDiv, { ...cachedElements, lastCacheTime: Date.now() });
   }
 
+  observeGeminiBlock(block, functionInfo.isComplete, isPreExistingIncomplete);
+
   // Add buttons for complete functions
   if (functionInfo.isComplete) {
     if (!blockDiv.querySelector('.raw-toggle')) {
@@ -1957,6 +1984,10 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
         }
         if (isAistudioHost() && (!provenance || !isAistudioAutomaticActionEnabled(functionName))) {
           logger.debug(`Auto-execution blocked for non-current AI Studio turn ${blockId} (${functionName})`);
+          return true;
+        }
+        if (isGeminiHost() && !canGeminiAutoExecute(block)) {
+          logger.debug(`Auto-execution blocked for historical Gemini turn ${blockId} (${functionName})`);
           return true;
         }
 
