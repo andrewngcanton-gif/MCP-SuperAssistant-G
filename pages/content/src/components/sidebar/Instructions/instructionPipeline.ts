@@ -1,5 +1,5 @@
 // pages/content/src/components/sidebar/Instructions/instructionPipeline.ts
-import { generateInstructionsCompact } from './instructionGeneratorCompact';
+import { generateInstructionsCompact, generateInstructionReminder } from './instructionGeneratorCompact';
 import { generateInstructionsJson } from './instructionGeneratorJson';
 
 export interface InstructionTool {
@@ -43,3 +43,5 @@ export const generateInstructionsForPreferences = (
     preferences.customInstructionsEnabled,
     preferences.useRtkWithWebCodex,
   );
+
+export { generateInstructionReminder };

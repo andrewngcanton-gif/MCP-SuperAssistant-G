@@ -5,6 +5,8 @@ import { useCurrentAdapter, useUserPreferences, useMCPState } from '../../hooks'
 import PopoverPortal from './PopoverPortal';
 import TabPickerPanel from './TabPickerPanel';
 import { instructionsState } from '../sidebar/Instructions/InstructionManager';
+import { generateInstructionReminder } from '../sidebar/Instructions/instructionGeneratorCompact';
+import { useToolStore } from '../../stores/tool.store';
 import { AutomationService } from '../../services/automation.service';
 import { createLogger } from '@extension/shared/lib/logger';
 import { telemetry } from '../../utils/telemetry';
@@ -750,6 +752,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   const [isHoverOverlayVisible, setIsHoverOverlayVisible] = useState(false);
   const [hoverOverlayPosition, setHoverOverlayPosition] = useState({ x: 0, y: 0 });
   const [isSidebarVisible, setIsSidebarVisible] = useState(true); // Track sidebar visibility
+  const [remindStatus, setRemindStatus] = useState<'Remind' | 'Reminded!' | 'No Adapter' | 'No Tools' | 'Failed'>('Remind');
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -822,6 +825,7 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     toggleStateManager.setAutoSubmit(preferences.autoSubmit || false);
     toggleStateManager.setAutoExecute(preferences.autoExecute || false);
   }, [toggleStateManager, mcpEnabledFromStore, preferences.autoInsert, preferences.autoSubmit, preferences.autoExecute]); // Include dependencies
+
 
   // Track sidebar visibility from window.activeSidebarManager and Zustand store
   useEffect(() => {
@@ -1001,6 +1005,47 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     } catch (error) {
       logger.error('[MCPPopover] Error toggling sidebar:', error);
     }
+  };
+
+  const handleRemind = async () => {
+    const { availableTools, enabledTools, isLoadingEnablement } = useToolStore.getState();
+    const shouldFilter = enabledTools instanceof Set && (!isLoadingEnablement || enabledTools.size > 0);
+    const activeTools = shouldFilter
+      ? availableTools.filter(t => enabledTools.has(t.name))
+      : availableTools;
+    const reminder = generateInstructionReminder(activeTools, preferences.useRtkWithWebCodex || false);
+
+    if (!reminder.trim()) {
+      setRemindStatus('No Tools');
+      setTimeout(() => setRemindStatus('Remind'), 1200);
+      return;
+    }
+
+    if (!isAdapterActive || !activePlugin || !insertText) {
+      logger.debug('Adapter not immediately ready for reminder, waiting 100ms and retrying...');
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    if (isAdapterActive && activePlugin && insertText) {
+      try {
+        const success = await insertText(reminder, { source: 'instructions', label: 'MCP Reminder' });
+        if (success) {
+          telemetry('instructions');
+          setRemindStatus('Reminded!');
+          logger.debug(`Reminder inserted successfully using ${activePlugin.name} adapter (${reminder.length} chars)`);
+        } else {
+          setRemindStatus('Failed');
+          logger.warn(`Reminder insertion failed using ${activePlugin.name} adapter`);
+        }
+      } catch (error) {
+        logger.error('Error inserting reminder:', error);
+        setRemindStatus('Failed');
+      }
+    } else {
+      setRemindStatus('No Adapter');
+      logger.warn('No active adapter available for reminder insertion');
+    }
+    setTimeout(() => setRemindStatus('Remind'), 1200);
   };
 
   const handleAttach = async () => {
@@ -1341,6 +1386,17 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
           </button>
           <button
             className="mcp-hover-button"
+            onClick={handleRemind}
+            title="Insert lightweight tool reminder for long chats"
+            type="button"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+              <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+            </svg>
+            {remindStatus}
+          </button>
+          <button
+            className="mcp-hover-button"
             onClick={handleAttach}
             title="Attach instructions as file"
             type="button"
@@ -1366,20 +1422,6 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
               )}
             </svg>
             {isSidebarVisible ? 'Hide Sidebar' : 'Show Sidebar'}
-          </button>
-          <button
-            className="mcp-hover-button"
-            data-mcp-tabs-trigger="true"
-            onClick={handleTabTriggerClick}
-            onMouseEnter={handleTabTriggerEnter}
-            onMouseLeave={handleTabTriggerLeave}
-            title="Attach browser tabs"
-            type="button"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
-              <path d="M3 5h10v2H3V5zm0 4h10v2H3V9zm0 4h7v2H3v-2zm14-8h4v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
-            </svg>
-            Tabs
           </button>
           <button
             className="mcp-hover-button"

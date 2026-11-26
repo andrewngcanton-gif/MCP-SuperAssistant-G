@@ -87,14 +87,14 @@ export const buildRtkInstructions = (tools: AdvertisedTool[] | undefined): strin
   if (!names) return '';
 
   const setup = [
-    names.listProjects && `Use \`${names.listProjects}\` if you need to discover the Project.`,
-    names.workOnProject && `Call \`${names.workOnProject}\` before the first Project command and follow its returned instructions.`,
-  ].filter(Boolean).join(' ');
+    names.listProjects && `discover project via \`${names.listProjects}\``,
+    names.workOnProject && `call \`${names.workOnProject}\` before the first command and follow its instructions`,
+  ]
+    .filter(Boolean)
+    .join('; ');
 
-  return `RTK OUTPUT COMPRESSION (WebCodex)
-Applies only to WebCodex Project commands run with \`${names.runProcess}\`.
-- Starting with the first eligible command, you MUST use RTK for every supported command expected to produce long human-readable output. Set executable to \`rtk\` and pass the original command and arguments in order, e.g. executable \`rtk\`, args \`["git","log","-12"]\`. Include all project/context parameters required by the tool schema.${setup ? `\n- ${setup}` : ''}
-- Use the ordinary command for unsupported commands, output that is short, machine-readable or structured, full logs, hashes and audits. If an RTK summary is not enough, read the raw output.
-- On Windows, invoke pip through RTK as \`rtk python -m pip\`.
-- Do not install RTK or change its trust or telemetry settings; run \`rtk trust\` only with the user's explicit consent.`;
+  return `RTK OUTPUT COMPRESSION (WebCodex \`${names.runProcess}\` only)
+- Use executable \`rtk\` with original args (e.g. \`["git","log","-12"]\`) for supported commands with long human-readable output; include required schema params.${setup ? ` First: ${setup}.` : ''}
+- Use raw commands for unsupported, short, structured/machine-readable, full-log, hash, or audit output (or if RTK summary lacks detail). Windows pip: \`rtk python -m pip\`.
+- Never install RTK or alter trust/telemetry; run \`rtk trust\` only with explicit user consent.`;
 };

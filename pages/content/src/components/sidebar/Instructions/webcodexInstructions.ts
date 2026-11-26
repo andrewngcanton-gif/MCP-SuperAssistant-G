@@ -82,14 +82,12 @@ export const buildWebCodexFileEditGuidance = (tools: AdvertisedTool[] | undefine
   const names = resolveWebCodexFileTools(tools);
   if (!names) return '';
 
-  const schemaAndRetryRules = `When using WebCodex, \`${names.editProjectFiles}\` requires nested JSON with \`project\` and \`changes\`. Every \`changes\` item MUST include \`kind\` and \`path\`. If the content contains many quotes, angle brackets, or multiple lines, skip \`${names.editProjectFiles}\`. If \`${names.editProjectFiles}\` returns even one error, do not retry it.`;
-
-  const action = names.runShell
-    ? `In either case, use \`${names.runShell}\` to write or modify the file in one operation with a short Python or PowerShell script.
-Follow the project's permissions and scope. If \`${names.runShell}\` is unavailable, stop and report the problem instead of inventing another tool.`
-    : `No WebCodex \`run_shell\` is available here. Do not invent another tool or use another server: stop and report the problem. Follow the project's permissions and scope.`;
+  const core = `\`${names.editProjectFiles}\` requires nested JSON (\`project\`, \`changes\` with \`kind\`+\`path\`). Skip it for multiline, quote-heavy, or angle-bracket edits, and never retry after an error.`;
+  const fallback = names.runShell
+    ? `Use \`${names.runShell}\` with a short Python/PowerShell script to edit in one step (within project permissions/scope); if unavailable, stop and report.`
+    : `No WebCodex \`run_shell\` is available; stop and report instead of inventing tools (within project permissions/scope).`;
 
   return `WEBCODEX FILE EDITS
-${schemaAndRetryRules}
-${action}`;
+- ${core}
+- ${fallback}`;
 };

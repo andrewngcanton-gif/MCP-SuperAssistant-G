@@ -44,6 +44,20 @@ After changing the toggle, re-run the generator and restart the proxy; the runni
 
 Detailed implementation-level notes for each release and fix. User-facing summaries live in [README.md](README.md) and [README.en.md](README.en.md).
 
+### v0.1.3
+
+- **Tiered Compact MCP instructions, Gemini conflict removal, and long-chat `Remind` (`instructionGeneratorCompact.ts`, `instructionPipeline.ts`, `website_specific_instruction/gemini.ts`, `webcodexInstructions.ts`, `rtkInstructions.ts`).**
+  - Added `partitionToolsForCompactIndex()` to inline 5 high-frequency WebCodex core tools (`list_projects`, `work_on_project`, `search_project_texts`, `read_files`, `run_shell`) while collapsing lower-frequency tools into a compact prefix list discoverable via `tool_lookup` / `get_tool_schema`. Tightened `oneLiner()` (58-char word-boundary truncation) and protocol wording, keeping a 17-tool WebCodex prompt on Gemini under 2,400 chars.
+  - Added minimal `geminiCompactInstructions` for Compact mode (single-line no-Python/no-`tool_code` note) to eliminate the legacy 5-bullet list and conflicting `json` code-fence example while keeping legacy Full mode intact.
+  - Added `generateInstructionReminder()` (< 750 chars) for lightweight mid-conversation rule reinforcement.
+- **Compact on-demand meta-tool responses and disabled-tool filtering (`metaTools.ts`).**
+  - Added `compactInputSchema()` to strip internal transport keys (such as `_wc`), clamp long parameter descriptions, and serialize `get_tool_schema` as single-line JSON.
+  - Updated `runMetaTool()` to filter against `enabledTools` so disabled tools are not exposed by `tool_lookup` or `get_tool_schema`, and added empty/`*`/`all` query support plus multi-token matching in `tool_lookup`.
+- **Hover menu streamlined to 5 buttons with `Remind` (`mcpPopover.tsx`).**
+  - Replaced the unused `Tabs` trigger with `Remind` (inserts `MCP Reminder` chip via `generateInstructionReminder()`), while keeping `Hide Sidebar` / `Show Sidebar` and its visibility sync intact (`Insert` / `Remind` / `Attach` / `Hide Sidebar` / `Configure`).
+- **Unit & DOM regression coverage (`instructionGeneratorCompact.test.ts`, `metaTools.test.ts`, `scripts/dom-tests/gemini.test.ts`, `pnpm test:unit`).**
+  - Added unit tests for Compact partitioning, Gemini prompt budget, `Remind` output, and meta-tool schema compaction/filtering, plus a Gemini DOM test for `MCP Reminder` chip insertion and submission.
+
 ### v0.1.2
 
 - **Gemini Auto Submit could expand a tool result and stall when Gemini was still closing its turn or Quill reformatted whitespace (`gemini.adapter.ts`).**

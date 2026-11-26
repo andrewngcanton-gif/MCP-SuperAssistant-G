@@ -32,7 +32,10 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## Changelog
 
-For implementation-level technical notes, see [CUSTOMIZATIONS.md](CUSTOMIZATIONS.md#technical-changelog).
+### v0.1.3
+
+- **Much shorter tool instructions and parameter lookups to save tokens.** The initial instructions now highlight only the most-used core tools while keeping the rest discoverable on demand; returned tool details drop redundant and internal fields, disabled tools are no longer exposed to the model, and an outdated conflicting Gemini example was removed.
+- **Added a lightweight Remind button to the hover menu and removed Tabs.** In long chats where the model starts forgetting how to call tools, click **Remind** to insert a brief rule reminder instead of re-sending the full instructions.
 
 ### v0.1.2
 
@@ -180,7 +183,6 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp
 ## Known issues
 
 - **Gemini may forget the tool descriptions in long conversations.** If it stops following the tool instructions, use **Insert** or **Attach** in the **MCP** menu next to the composer, then send the current MCP Instructions again.
-- **Auto Submit occasionally fails.** The intermittent cause has yet to be diagnosed. If the result is already in the composer, wait until the page is ready and send it manually once.
 - **Tool calls can return HTTP 400 or time out.** The model can sometimes recover by switching tools. The MCP Instructions explicitly tell the model to switch from WebCodex's `edit_project_files` to `run_shell` on the same server after the first error, if available. Recovery from other tool errors or timeouts depends on the model and the error. If a file edit times out, check whether the file changed before retrying.
 - **Tested environment.** This extension has only been tested in Chrome on Windows 11.
 

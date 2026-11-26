@@ -16,6 +16,7 @@ import {
 import { useUIStore } from '@src/stores/ui.store';
 import { useToolStore } from '@src/stores/tool.store';
 import { useAdapterStore } from '@src/stores/adapter.store';
+import { generateInstructionReminder } from '@src/components/sidebar/Instructions/instructionGeneratorCompact';
 
 declare global {
   interface Window {
@@ -288,6 +289,27 @@ async function main() {
     createStalledIndicator('block-manual', manualCard, true);
     assert(manualCard.querySelector('.spinner') === null, 'createStalledIndicator must remove .spinner');
     assert(manualCard.classList.contains('function-stalled'), 'createStalledIndicator must add function-stalled');
+  });
+
+  // Test 6: Remind inserts lightweight MCP Reminder chip and flushes cleanly with user draft on submit
+  await runTest('Gemini Remind chip inserts lightweight reminder and flushes with draft', async () => {
+    window.__setMockPath('/app/chat-remind-chip');
+    const page = mountGeminiDom();
+    const adapter = setupGeminiAdapter();
+    const reminder = generateInstructionReminder([
+      { name: 'webcodex.list_projects', schema: '{}', description: 'List projects.' },
+      { name: 'webcodex.run_shell', schema: '{}', description: 'Run shell.' },
+      { name: 'webcodex.edit_project_files', schema: '{}', description: 'Edit files.' },
+    ], false);
+    assert(reminder.length > 0 && reminder.length < 750, `Expected compact reminder, got ${reminder.length} chars`);
+
+    const ok = await adapter.insertText(reminder, { source: 'instructions', label: 'MCP Reminder' });
+    assert(ok === true, 'Expected insertText for MCP Reminder to succeed');
+
+    const sent = await adapter.submitForm();
+    assert(sent === true, 'Expected submitForm to flush and send MCP Reminder');
+    assert(page.sentMessages.length === 1, 'Expected 1 sent message');
+    assert(page.sentMessages[0].includes('[MCP SuperAssistant reminder]'), 'Sent message must include reminder header');
   });
 
   window.__testResults = results;
