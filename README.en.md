@@ -185,6 +185,11 @@ Follow these 3 steps (using local WebCodex **0.5.0** as an example):
      }
      ```
 
+     How to get `<your WebCodex token>` (keep it local only — never commit it or share it publicly):
+     - Run `webcodex login ... --print-mcp-config` with the WebCodex CLI (or `webcodex share` for a quick session) and copy the Bearer token printed in the terminal;
+     - If you signed in with **WebCodex Desktop**, look for the `webcodex-user-token` file in its local connections directory (on Windows, under `%LOCALAPPDATA%\dev.webcodex.desktop\local-connections\`, the same file Option A reads) and copy its plain-text content;
+     - Or use a user API token issued directly by your self-hosted WebCodex server.
+
 3. **Start the proxy and connect in the extension**
    - For **Option A**, start (or restart) the proxy with the command below and leave it running; for **Option B**, point `--config` to your own `./mcp-config.json`:
 

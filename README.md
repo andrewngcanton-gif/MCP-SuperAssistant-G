@@ -185,6 +185,11 @@ pnpm build
      }
      ```
 
+     `<你的 WebCodex token>` 可通过以下任一方式获取（仅保存在本地配置文件，切勿提交到仓库或公开分享）：
+     - 使用 WebCodex CLI 登录时带上 `--print-mcp-config`（如 `webcodex login ... --print-mcp-config`），或使用临时试用命令 `webcodex share`，终端会直接打印连接地址与对应的 Bearer token；
+     - 已登录 **WebCodex Desktop** 时，可在桌面端本地连接目录找到 `webcodex-user-token` 文件（Windows 位于 `%LOCALAPPDATA%\dev.webcodex.desktop\local-connections\` 下，即方式 A 脚本读取的同一文件），复制其中的纯文本内容；
+     - 使用自建服务端时，也可直接填入由同一 WebCodex 服务端为你签发的用户 API token。
+
 3. **启动代理并在扩展中连接**
    - 如果采用 **方式 A**，运行下面命令启动（或重启）代理并保持窗口开启；如果采用 **方式 B**，把 `--config` 换成你自己的 `./mcp-config.json` 路径：
 
