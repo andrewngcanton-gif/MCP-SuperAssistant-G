@@ -64,7 +64,7 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## New features and improvements
 
-- **Optional WebCodex RTK guidance.** Install the RTK command-line tool on the machine running WebCodex Runner and make sure `rtk` is on the Runner's `PATH`. This works with stock WebCodex. **Instructions → Use RTK with WebCodex** is off by default. Enable WebCodex's `run_process` tool and turn on the toggle, then send the regenerated MCP Instructions to the chat. The guidance asks the model to use RTK for long output from suitable commands. To also return the rule from `work_on_project`, you can configure the Runner's `[instructions].files` separately. [RTK installation](https://github.com/rtk-ai/rtk)
+- **Optional WebCodex RTK guidance.** Install the RTK command-line tool on the machine running WebCodex Runner and make sure `rtk` is on the Runner's `PATH`. This works with stock WebCodex. **Instructions → Use RTK with WebCodex** is off by default. Enable WebCodex's `run_process` tool and turn on the toggle, then send the regenerated MCP Instructions to the chat. The guidance asks the model to use RTK for long output from suitable commands. To also return the rule from `work_on_project`, see [WebCodex advanced config (runner.toml / RTK instructions)](#webcodex-runner-config) to configure the Runner's `[instructions].files`. [RTK installation](https://github.com/rtk-ai/rtk)
 - **WebCodex file-edit guidance.** Instructions spell out the required `project` and `changes` arguments for `edit_project_files`, including `kind` and `path` on every change. For complex content or after the first error, the guidance points the model to `run_shell` on the same WebCodex server when available, reducing repeated attempts and token use.
 - **Shorter MCP Instructions.** The Compact and JSON templates use fewer words while retaining required arguments, schema lookup, call examples, and the WebCodex and RTK rules. The blanket instruction to retry after a schema hint was removed.
 - **Opt-in CrewDispatch proxy setup.** The publicly released CrewDispatch plugin is outdated and will receive no further updates. Most users can leave this option off, which is the default. If you already have a working CrewDispatch MCP server, you can register it with the config generator. After changing the toggle, generate the config again and restart the proxy. [CrewDispatch setup](CUSTOMIZATIONS.md#crewdispatch-opt-in-proxy-configuration)
@@ -198,6 +198,195 @@ Follow these 3 steps (using local WebCodex **0.5.0** as an example):
      ```
 
    - In the extension sidebar's connection settings, choose **SSE**, enter `http://localhost:3006/sse` as **Server URI**, and click **Connect**. Once **Connected**, open the **Tools** tab and confirm the WebCodex tools (such as `webcodex.list_projects` and `webcodex.run_shell`) are listed and enabled.
+
+<a id="webcodex-runner-config"></a>
+<details>
+<summary>Optional: WebCodex advanced config (runner.toml policy & RTK instructions, webcodex.env flags)</summary>
+
+1. **`runner.toml` execution policy & RTK instruction injection** (located at the `runner.toml` path found below):
+
+   - Recommended `[policy]` settings to enable `run_shell` safely within configured project roots:
+
+     ```toml
+     [policy]
+     allow_raw_shell = true
+     allow_cwd_anywhere = false
+     allowed_roots = ['D:\your-projects-root']
+     max_timeout_secs = 3600
+     max_output_bytes = 262144
+     ```
+
+   - **Pair with [Optional WebCodex RTK guidance](#new-features-and-improvements)**: create `rtk-instructions.md` next to `runner.toml` and attach it via `[instructions].files` so `work_on_project` also returns the RTK compression rules to the model:
+
+     ```toml
+     [instructions]
+     files = ['<path to your local-connections dir>\rtk-instructions.md']
+     ```
+
+     Example `rtk-instructions.md`:
+
+     ```markdown
+     # RTK output compression
+
+     - When running supported commands on this Runner that produce verbose human-readable output, compress output with RTK before returning it: call `run_process` with `executable: "rtk"` and pass the original command and arguments in `args` (e.g. `["git","log","-12"]`). Use original commands for short outputs or unsupported commands.
+     - Always run original commands for machine-readable output, structured verification evidence, full logs, releases, security checks, forensics, or hashes; inspect full output if compressed summary is insufficient.
+     - Keep telemetry disabled; only run `rtk trust` with explicit user consent.
+     ```
+
+2. **`webcodex.env` server-side compact & compatibility flags** (on Windows, located at `%LOCALAPPDATA%\dev.webcodex.desktop\runtime\local\webcodex.env`; restart WebCodex server after editing):
+
+   ```ini
+   WEBCODEX_MCP_COMPACT_SCHEMAS=true
+   WEBCODEX_MCP_TEXT_JSON_COMPAT=true
+   ```
+
+</details>
+
+<details>
+<summary>Optional (Windows): Headless auto-start on login for WebCodex CLI & local Proxy (saves ~480 MB RAM, no open terminal windows)</summary>
+
+If you don't want to manually open **WebCodex Desktop** or keep a terminal window open, you can register two hidden Windows Scheduled Tasks that launch `webcodex-server` + `webcodex-runner` and the local SSE proxy after sign-in. They reuse the exact env file, runner config, and token created by WebCodex Desktop while skipping its WebView2 GUI (~480 MB RAM saved).
+
+**Prerequisites**: Sign in once in WebCodex Desktop and register your project(s) so `webcodex.env` and `runner.toml` exist, then quit Desktop and **disable WebCodex Desktop's own auto-start on login** (so it doesn't compete with headless `WebCodexCLI` for port `60143`), and complete **Step 2** above to generate your proxy config file.
+
+1. Find your `runner.toml` path (needed for the launcher script below):
+
+   ```powershell
+   Get-ChildItem "$env:LOCALAPPDATA\dev.webcodex.desktop\local-connections" -Recurse -File -Filter 'runner.toml' |
+       Select-Object -ExpandProperty FullName
+   ```
+
+2. Create `$env:USERPROFILE\mcp-superassistant\` and save these two scripts inside it (replace `<WebCodex Desktop install dir>` and `<full path to runner.toml>`):
+
+   **`start-webcodex-cli.ps1`** (starts `webcodex-server` + `webcodex-runner` hidden and restarts exited components every 15s):
+
+   ```powershell
+   $ErrorActionPreference = "Stop"
+
+   # Workaround for Windows PowerShell 5.1: clear lowercase duplicate proxy env vars so Start-Process won't throw
+   foreach ($name in @('http_proxy','https_proxy','no_proxy','all_proxy')) {
+       [System.Environment]::SetEnvironmentVariable($name, $null, 'Process')
+   }
+
+   $runtimeDir = "<WebCodex Desktop install dir>\webcodex-runtime"
+   $serverExe  = Join-Path $runtimeDir "webcodex-server.exe"
+   $runnerExe  = Join-Path $runtimeDir "webcodex-runner.exe"
+   $envFile    = Join-Path $env:LOCALAPPDATA "dev.webcodex.desktop\runtime\local\webcodex.env"
+   $runnerCfg  = "\\?\<full path to runner.toml>"
+   $logDir     = Join-Path $env:USERPROFILE "mcp-superassistant"
+   $mainLog    = Join-Path $logDir "webcodex-cli.log"
+   $serverLog  = Join-Path $logDir "webcodex-server.log"
+   $runnerLog  = Join-Path $logDir "webcodex-runner.log"
+
+   function Write-Log($msg) {
+       Add-Content -Path $mainLog -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $msg" -Encoding utf8
+   }
+
+   foreach ($f in @($serverExe, $runnerExe, $envFile, $runnerCfg)) {
+       if (-not (Test-Path -LiteralPath $f)) { Write-Log "ERROR: missing path: $f"; exit 1 }
+   }
+
+   if (Get-NetTCPConnection -LocalPort 60143 -State Listen -ErrorAction SilentlyContinue) {
+       Write-Log "WebCodex server already listening on 60143. Exiting."
+       exit 0
+   }
+
+   function Start-Component($name, $exe, $argList, $outLog) {
+       $proc = Start-Process -FilePath $exe -ArgumentList $argList -WindowStyle Hidden `
+           -RedirectStandardOutput $outLog -RedirectStandardError "$outLog.err" -PassThru
+       Write-Log "Started $name (PID $($proc.Id))"
+       return ,$proc
+   }
+
+   $server = Start-Component "server" $serverExe @('--env-file', $envFile) $serverLog
+   $ready = $false
+   for ($i = 0; $i -lt 60; $i++) {
+       if (Get-NetTCPConnection -LocalPort 60143 -State Listen -ErrorAction SilentlyContinue) { $ready = $true; break }
+       Start-Sleep -Seconds 1
+   }
+   if (-not $ready) { Write-Log "ERROR: webcodex-server did not bind 60143 within 60s."; exit 1 }
+
+   $runner = Start-Component "runner" $runnerExe @('--config', $runnerCfg) $runnerLog
+   Start-Sleep -Seconds 2
+
+   $components = @(
+       @{ Name='server'; Proc=$server; Exe=$serverExe; Args=@('--env-file',$envFile); Log=$serverLog },
+       @{ Name='runner'; Proc=$runner; Exe=$runnerExe; Args=@('--config',$runnerCfg); Log=$runnerLog }
+   )
+   while ($true) {
+       Start-Sleep -Seconds 15
+       foreach ($c in $components) {
+           $c.Proc.Refresh()
+           if ($c.Proc.HasExited) {
+               Write-Log "$($c.Name) exited (code $($c.Proc.ExitCode)). Restarting..."
+               $c.Proc = Start-Component $c.Name $c.Exe $c.Args $c.Log
+           }
+       }
+   }
+   ```
+
+   **`start-proxy.ps1`** (waits for `127.0.0.1:60143/mcp` to answer HTTP requests, then launches the SSE proxy on port `3006`):
+
+   ```powershell
+   $ErrorActionPreference = "Stop"
+   $workDir      = Join-Path $env:USERPROFILE "mcp-superassistant"
+   $logFile      = Join-Path $workDir "proxy.log"
+   $configPath   = Join-Path $env:LOCALAPPDATA "mcp-superassistant-webcodex.json"
+   $webcodexPort = 60143
+
+   function Write-Log($msg) {
+       Add-Content -Path $logFile -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $msg" -Encoding utf8
+   }
+
+   if (Get-NetTCPConnection -LocalPort 3006 -State Listen -ErrorAction SilentlyContinue) {
+       Write-Log "Proxy already listening on 3006. Exiting."
+       exit 0
+   }
+
+   # Any HTTP response (including 401) means the MCP endpoint is ready
+   $ready = $false
+   for ($i = 0; $i -lt 90; $i++) {
+       if (Get-NetTCPConnection -LocalPort $webcodexPort -State Listen -ErrorAction SilentlyContinue) {
+           try {
+               $resp = Invoke-WebRequest -Uri "http://127.0.0.1:${webcodexPort}/mcp" -Method Get -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+               $ready = $true; Write-Log "WebCodex ready (HTTP $([int]$resp.StatusCode))."; break
+           } catch {
+               if ($_.Exception.Response) {
+                   $ready = $true; Write-Log "WebCodex ready (HTTP $([int]$_.Exception.Response.StatusCode))."; break
+               }
+           }
+       }
+       Start-Sleep -Seconds 2
+   }
+   if (-not $ready) { Write-Log "ERROR: WebCodex MCP endpoint timeout."; exit 1 }
+
+   Set-Location $workDir
+   & npx.cmd -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config $configPath --outputTransport sse --port 3006 2>&1 |
+       ForEach-Object { Write-Output $_; Write-Log $_ }
+   ```
+
+3. Register both hidden login tasks for your Windows user and start them immediately (no admin privileges required):
+
+   ```powershell
+   $dir = Join-Path $env:USERPROFILE "mcp-superassistant"
+   $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+       -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+
+   foreach ($item in @(
+       @{ Name = 'WebCodexCLI';            Script = (Join-Path $dir 'start-webcodex-cli.ps1') },
+       @{ Name = 'McpSuperAssistantProxy'; Script = (Join-Path $dir 'start-proxy.ps1') }
+   )) {
+       $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
+           -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$($item.Script)`""
+       Register-ScheduledTask -TaskName $item.Name -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
+       Start-ScheduledTask -TaskName $item.Name
+   }
+   ```
+
+   To remove auto-start later: `Unregister-ScheduledTask -TaskName WebCodexCLI, McpSuperAssistantProxy -Confirm:$false`.
+
+</details>
 
 ### 5. Test and update
 
