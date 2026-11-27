@@ -705,7 +705,7 @@ class InputChipManager {
     const target = e.target as Node | null;
     if (!target || !anchors.input.contains(target)) return;
     // In AI Studio's default Ctrl+Enter mode, plain Enter inserts a newline; leave it native.
-    if (isAistudio && !e.ctrlKey && anchors.container.querySelector('ms-run-button button.ctrl-enter-submits, button.ctrl-enter-submits')) {
+    if (isAistudio && !e.ctrlKey && (anchors.ctrlEnterOnly || anchors.container.querySelector('ms-run-button button.ctrl-enter-submits, button.ctrl-enter-submits'))) {
       return;
     }
     // A merge/submit already owns this gesture: swallow a second Enter so the page cannot send

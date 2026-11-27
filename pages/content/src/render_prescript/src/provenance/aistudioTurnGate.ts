@@ -23,10 +23,10 @@
  */
 
 import { createLogger } from '@extension/shared/lib/logger';
+import { isAistudioAppsRoute, isAistudioRawHost } from './aistudioAppsTurnGate';
 
 const logger = createLogger('AistudioTurnGate');
 
-const AISTUDIO_HOST = 'aistudio.google.com';
 const TURN_SELECTOR = '[data-turn-role]';
 const TURN_ID_ANCESTOR_SELECTOR = 'ms-prompt-chunk, ms-chat-turn, ms-turn, [data-turn-id], [data-message-id], [data-response-id]';
 const COMPOSER_SELECTOR = '.prompt-box-container, ms-prompt-box, .prompt-input-wrapper, .input-area-container';
@@ -60,7 +60,7 @@ const USER_ROLES = new Set(['user', 'human']);
 const MODEL_ROLES = new Set(['model', 'assistant', 'bot']);
 // A first-send transition is only the new-chat route becoming a named chat. Named -> named and
 // any unrelated URL change must invalidate the old cycle before old DOM is unmounted.
-const NEW_CHAT_ROUTES = new Set(['/', '/app', '/app/prompts/new', '/app/prompts/new_chat', '/app/prompts/new-chat', '/prompts/new', '/prompts/new_chat', '/prompts/new-chat']);
+const NEW_CHAT_ROUTES = new Set(['/', '/app', '/app/apps', '/apps', '/app/prompts/new', '/app/prompts/new_chat', '/app/prompts/new-chat', '/prompts/new', '/prompts/new_chat', '/prompts/new-chat']);
 const normalizeRoutePath = (path: string): string => {
   const stripped = path.replace(/^\/u\/\d+(?=\/)/, '').replace(/\/+$/, '');
   return stripped || '/';
@@ -71,7 +71,7 @@ const isNamedChatRoute = (path: string): boolean => {
 };
 /** Shared AI Studio new-chat routes are reused across unrelated conversations; never key history by them. */
 export const isAistudioNewChatUrl = (url?: string): boolean => {
-  if (!isAistudioHost()) return false;
+  if (!isAistudioRawHost()) return false;
   try {
     const pathname = url ? new URL(url, location.origin).pathname : location.pathname;
     return NEW_CHAT_ROUTES.has(normalizeRoutePath(pathname));
@@ -123,11 +123,7 @@ interface SubmissionCycle {
 
 const isBrowser = (): boolean => typeof window !== 'undefined' && typeof document !== 'undefined' && typeof location !== 'undefined';
 
-export const isAistudioHost = (): boolean => {
-  if (!isBrowser()) return false;
-  const host = location.hostname.toLowerCase();
-  return host === AISTUDIO_HOST || host.endsWith(`.${AISTUDIO_HOST}`);
-};
+export const isAistudioHost = (): boolean => isAistudioRawHost() && !isAistudioAppsRoute();
 
 const sessionId = `aistudio-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 const historicalTurnIds = new Set<string>();
@@ -762,7 +758,7 @@ const onNavigation = (): void => {
 let navigationListenersAttached = false;
 
 export const initializeAistudioTurnGate = (): void => {
-  if (!isAistudioHost() || initialized) return;
+  if (!isAistudioRawHost() || initialized) return;
   initialized = true;
   snapshotHistorical();
 

@@ -44,6 +44,14 @@ After changing the toggle, re-run the generator and restart the proxy; the runni
 
 Detailed implementation-level notes for each release and fix. User-facing summaries live in [README.md](README.md) and [README.en.md](README.en.md).
 
+### v0.1.5
+
+- **Google AI Studio Build / Apps adapter and isolated turn gate (`aistudio-apps.ts`, `aistudioAppsTurnGate.ts`, `aistudio.adapter.ts`, `aistudioTurnGate.ts`, `plugin-types.ts`, `input-chips.ts`, `index.ts`, `functionBlock.ts`, `components.ts`).**
+  - Added dedicated route-gated helpers (`aistudio-apps.ts`) supporting both the `/app/apps` landing composer (`ms-applet-generator-form` `contenteditable="plaintext-only"`) and the `/apps/<id>` workspace assistant pane (`ms-code-assistant-chat` `<textarea class="cdk-textarea-autosize">`) while excluding the competing right-pane Monaco editor (`.monaco-editor textarea.inputarea`), waiting for Stop-control completion before chip flush/submit, and handling `Ctrl+Enter` / disabled-button states.
+  - Added `aistudioAppsTurnGate.ts` to keep `/app/apps` and `/apps/*` isolated from Playground (`aistudioTurnGate.ts`), arming on `Ctrl+Enter` (ignoring IME composition), Send clicks, and extension auto-submits, preserving armed state across `/app/apps` → `/apps/<id>` first-send navigation and query-param changes, blocking historical replay on reload or app switch, enforcing `window.__mcpToolEnablement`, and scoping auto-execution dedupe per turn (`claimAistudioAppsAutoExecution()`).
+- **Headless Chrome DOM regression suite (`scripts/dom-tests/aistudio-apps.test.ts`, `scripts/dom-tests/run.mjs`).**
+  - Added a 10-test suite covering landing and dual-pane workspace DOMs (including competing Monaco `<textarea>`), historical replay blocking, manual Run `skipAutoDelivery`, mid-generation Stop wait, draft-edit/navigation abort, multi-turn rounds, cross-app repeated tool calls, and `Disable All` / per-tool disable enforcement.
+
 ### v0.1.4
 
 - **Preserved regex & newline escapes in `run_shell` tool calls (`jsonFunctionParser.ts`, `webcodexInstructions.ts`).**

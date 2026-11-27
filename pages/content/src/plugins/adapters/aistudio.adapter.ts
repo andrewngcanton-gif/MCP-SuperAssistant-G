@@ -14,6 +14,14 @@ import {
   findAistudioSendButton,
   isAistudioSendButtonEnabled,
 } from '../../render_prescript/src/provenance/aistudioTurnGate';
+import {
+  findAistudioAppsInput,
+  getAistudioAppsChipAnchors,
+  insertTextToAistudioAppsInput,
+  isAistudioAppsRoute,
+  submitAistudioAppsInput,
+  waitForAistudioAppsIdle,
+} from './aistudio-apps';
 
 /**
  * AI Studio Adapter for Google AI Studio (aistudio.google.com)
@@ -381,7 +389,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
 
     try {
       // Use the proven chatInputHandler method
-      const success = insertTextToChatInput(text);
+      const success = isAistudioAppsRoute() ? insertTextToAistudioAppsInput(text) : insertTextToChatInput(text);
 
       if (success) {
         // Emit success event to the new event system
@@ -407,6 +415,8 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
   }
 
   getChipAnchors(): ChipAnchors | null {
+    if (isAistudioAppsRoute()) return getAistudioAppsChipAnchors();
+
     // Reuse the resilient input finder (many placeholder/aria fallbacks).
     const input = findChatInputElement();
     if (!input) return null;
@@ -431,6 +441,40 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     deferWhenBusy?: boolean;
     onBusy?: () => void;
   }): Promise<boolean> {
+    if (isAistudioAppsRoute()) {
+      const idle = await waitForAistudioAppsIdle(5000, options?.canProceed);
+      if (!idle) {
+        this.emitExecutionFailed('submitForm', 'AI Studio Apps composer busy or context changed before flush');
+        return false;
+      }
+      const flushedApps = await inputChips.flushBeforeSubmit(this);
+      if (!flushedApps) {
+        this.emitExecutionFailed('submitForm', 'Chip flush failed');
+        return false;
+      }
+      if (options?.canProceed && !options.canProceed()) {
+        this.emitExecutionFailed('submitForm', 'Automation context changed before submit');
+        return false;
+      }
+      try {
+        const success = await submitAistudioAppsInput(5000, options?.canProceed);
+        if (success) {
+          this.emitExecutionCompleted(
+            'submitForm',
+            { formElement: options?.formElement?.tagName || 'ms-applet-generator-form' },
+            { success: true, method: 'aistudioApps' },
+          );
+        } else {
+          this.emitExecutionFailed('submitForm', 'Failed to submit /app/apps prompt');
+        }
+        return success;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.emitExecutionFailed('submitForm', errorMessage);
+        return false;
+      }
+    }
+
     const flushed = await inputChips.flushBeforeSubmit(this);
     if (!flushed) {
       // flushBeforeSubmit restores chips on failure; never send a partial draft.
@@ -716,6 +760,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     // Check if we're on a supported AI Studio page
     const supportedPatterns = [
       /^https:\/\/aistudio\.google\.com\/app\/.*/,  // App pages
+      /^https:\/\/aistudio\.google\.com\/(?:u\/\d+\/)?apps(?:\/.*)?$/,  // Build / Apps workspace pages
       /^https:\/\/aistudio\.google\.com\/$/,        // Home page
       /^https:\/\/aistudio\.google\.com\/prompts\/.*/  // Prompts pages
     ];
@@ -739,7 +784,7 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
     this.context.logger.debug('Checking file upload support for AI Studio');
 
     // Check if we can find the chat input element using the chatInputHandler
-    const chatInput = findChatInputElement();
+    const chatInput = isAistudioAppsRoute() ? findAistudioAppsInput() : findChatInputElement();
     if (chatInput) {
       this.context.logger.debug('Found chat input element, file upload should be supported');
       return true; // AI Studio generally supports file upload via drag and drop
@@ -1835,7 +1880,7 @@ export const attachFileToChatInput = async (file: File): Promise<boolean> => {
       // Chrome/Other browsers: Use drag-and-drop method (works well)
       logger.debug('Chrome/Other browser detected: Using drag-and-drop method');
 
-      const chatInput = findChatInputElement();
+      const chatInput = isAistudioAppsRoute() ? findAistudioAppsInput() : findChatInputElement();
 
       if (!chatInput) {
         logger.debug('Could not find AiStudio input element for file attachment');

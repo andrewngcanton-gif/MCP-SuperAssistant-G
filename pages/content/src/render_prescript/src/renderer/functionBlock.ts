@@ -30,6 +30,11 @@ import {
   isGeminiHost,
   observeGeminiBlock,
 } from '../provenance/geminiTurnGate';
+import {
+  canAistudioAppsAutoExecute,
+  claimAistudioAppsAutoExecution,
+  isAistudioAppsHost,
+} from '../provenance/aistudioAppsTurnGate';
 
 // Define custom property for tracking scroll state
 
@@ -197,6 +202,7 @@ const canAutoExecuteNow = (block: HTMLElement | null, details: { functionName: s
   if (!settingOn) return false;
 
   if (isGeminiHost()) return canGeminiAutoExecute(block);
+  if (isAistudioAppsHost()) return canAistudioAppsAutoExecute(block, details.functionName);
   if (!isAistudioHost()) return true;
   if (!isAistudioAutomaticActionEnabled(details.functionName)) return false;
   if (!details.provenance || !isAistudioProvenanceCurrent(details.provenance)) return false;
@@ -1215,13 +1221,14 @@ const AutoExecutionUtils = {
           // On AI Studio, turn provenance + logical invocation claims govern replay/dedupe per
           // turn; URL-keyed localStorage history breaks shared /prompts/new_chat and repeated
           // calls across later turns in the same conversation.
-          const finalCheckExecuted = isAistudioHost()
-            ? null
-            : getPreviousExecution(
-                functionDetails.functionName,
-                functionDetails.callId,
-                functionDetails.contentSignature,
-              );
+          const finalCheckExecuted =
+            isAistudioHost() || isAistudioAppsHost()
+              ? null
+              : getPreviousExecution(
+                  functionDetails.functionName,
+                  functionDetails.callId,
+                  functionDetails.contentSignature,
+                );
           if (finalCheckExecuted) {
             logger.debug(`Auto-execute: Function already executed, skipping.`);
             executionTracker.cleanupBlock(blockId);
@@ -1292,13 +1299,14 @@ const AutoExecutionUtils = {
       const callId = block.querySelector('.call-id')?.textContent?.trim();
 
       if (name === functionDetails.functionName && callId === functionDetails.callId) {
-        const alreadyExecuted = isAistudioHost()
-          ? null
-          : getPreviousExecution(
-              functionDetails.functionName,
-              functionDetails.callId,
-              functionDetails.contentSignature,
-            );
+        const alreadyExecuted =
+          isAistudioHost() || isAistudioAppsHost()
+            ? null
+            : getPreviousExecution(
+                functionDetails.functionName,
+                functionDetails.callId,
+                functionDetails.contentSignature,
+              );
 
         if (!alreadyExecuted) {
           logger.debug(`Auto-execute: Found replacement block, attempting execution.`);
@@ -1541,7 +1549,7 @@ const renderCard = (
       // logical (userTurnId, modelTurnId, callId); URL-keyed history must not block new turns
       // on shared /prompts/new_chat or later turns reusing call_id=1.
       const alreadyExec =
-        !isAistudioHost() && contentSignature
+        !isAistudioHost() && !isAistudioAppsHost() && contentSignature
           ? executionTracker.isFunctionExecuted(callId, contentSignature, functionName)
           : false;
       if (contentSignature && !alreadyExec) {
@@ -1556,6 +1564,10 @@ const renderCard = (
         }
         if (isGeminiHost() && !canGeminiAutoExecute(block)) {
           logger.debug(`Auto-execution blocked for historical Gemini turn ${cardId} (${functionName})`);
+          return;
+        }
+        if (isAistudioAppsHost() && !claimAistudioAppsAutoExecution(block, functionName, callId, contentSignature)) {
+          logger.debug(`Auto-execution blocked for historical AI Studio Apps turn ${cardId} (${functionName})`);
           return;
         }
         if (executionTracker.isBlockExecuted(cardId) === true) {
@@ -1974,7 +1986,7 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
       // logical (userTurnId, modelTurnId, callId); URL-keyed history must not block new turns
       // on shared /prompts/new_chat or later turns reusing call_id=1.
       const alreadyExec =
-        !isAistudioHost() && contentSignature
+        !isAistudioHost() && !isAistudioAppsHost() && contentSignature
           ? executionTracker.isFunctionExecuted(callId, contentSignature, functionName)
           : false;
       if (contentSignature && !alreadyExec) {
@@ -1988,6 +2000,10 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
         }
         if (isGeminiHost() && !canGeminiAutoExecute(block)) {
           logger.debug(`Auto-execution blocked for historical Gemini turn ${blockId} (${functionName})`);
+          return true;
+        }
+        if (isAistudioAppsHost() && !claimAistudioAppsAutoExecution(block, functionName, callId, contentSignature)) {
+          logger.debug(`Auto-execution blocked for historical AI Studio Apps turn ${blockId} (${functionName})`);
           return true;
         }
 

@@ -207,7 +207,7 @@ const poll = setInterval(() => {
 }
 
 const suites = process.argv.slice(2);
-const targets = suites.length > 0 ? suites : ['aistudio.test.ts', 'gemini.test.ts'];
+const targets = suites.length > 0 ? suites : ['aistudio.test.ts', 'aistudio-apps.test.ts', 'gemini.test.ts'];
 const chromePath = findChromeBinary();
 
 let grandTotal = 0;

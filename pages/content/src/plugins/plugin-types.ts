@@ -73,6 +73,8 @@ export interface ChipAnchors {
   input: HTMLElement;
   container: HTMLElement;
   submitButtonSelector: string;
+  /** When true on AI Studio, plain Enter keeps native newline and only Ctrl+Enter submits. */
+  ctrlEnterOnly?: boolean;
 }
 
 export interface AdapterPlugin {

@@ -31,6 +31,11 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## Changelog
 
+### v0.1.5
+
+- **Added support for Google AI Studio Build / Apps (`/app/apps` and `/apps/<id>`).** Works with both the initial prompt box and the left-side assistant chat pane after an app is created, supporting **Insert / Remind** chip merging, `Ctrl+Enter` or Send button submission, and multi-turn automatic tool execution, insertion, and submission without touching the right-side code editor.
+- **Added historical-replay and mid-generation guards for AI Studio Build / Apps.** Reloading or switching to an existing app no longer auto-runs or auto-submits older tool cards (manual **Run** still works); auto-submit waits for generation to finish before sending and honors cross-app navigation and tool enablement toggles.
+
 ### v0.1.4
 
 - **Core tools include required parameters upfront to skip extra lookup rounds.** Frequently used tools now show brief required-parameter hints in the initial prompt, so the model can call common tools directly on the first turn instead of doing an extra schema lookup first.

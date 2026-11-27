@@ -15,6 +15,7 @@ import {
   type AistudioProvenance,
 } from '../provenance/aistudioTurnGate';
 import { canGeminiAutoExecute, isGeminiHost } from '../provenance/geminiTurnGate';
+import { canAistudioAppsAutoExecute, isAistudioAppsHost } from '../provenance/aistudioAppsTurnGate';
 
 // Add type declarations for the global adapter and mcpClient access
 
@@ -508,7 +509,9 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
       }
 
       logger.debug(`Executing function ${functionName}, call_id: ${callId} with arguments:`, parameters);
-      const isHistoricalGeminiCard = isGeminiHost() && !canGeminiAutoExecute(fnBlock);
+      const isHistoricalCard =
+        (isGeminiHost() && !canGeminiAutoExecute(fnBlock)) ||
+        (isAistudioAppsHost() && !canAistudioAppsAutoExecute(fnBlock));
 
       // Show results panel and loading indicator
       resultsPanel.style.display = 'block';
@@ -525,7 +528,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
         displayResult(resultsPanel, loadingIndicator, true, result, performance.now() - t0, {
           provenance,
           invocationId,
-          skipAutoDelivery: isHistoricalGeminiCard,
+          skipAutoDelivery: isHistoricalCard,
         });
 
         // Store execution and update history efficiently
@@ -557,7 +560,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
         displayResult(resultsPanel, loadingIndicator, false, errorMessage, performance.now() - t0, {
           provenance,
           invocationId,
-          skipAutoDelivery: isHistoricalGeminiCard || isContextInvalid,
+          skipAutoDelivery: isHistoricalCard || isContextInvalid,
         });
 
         // Invalidated extension contexts (e.g. tab not refreshed after extension reload) should
@@ -574,7 +577,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
           // Storage quota/errors should never block returning ERROR to the model.
         }
 
-        if (isHistoricalGeminiCard) {
+        if (isHistoricalCard) {
           return;
         }
 
