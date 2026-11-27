@@ -439,6 +439,16 @@ async function main() {
     await sleep(500);
     assert(page.sentMessages.length === 1, `Expected 1 submit after Ctrl+Enter, got ${page.sentMessages.length}`);
     assert(page.sentMessages[0].includes('[SuperAssistant tools'), 'Submitted message must contain instructions');
+
+    // Trusted macOS Cmd+Enter (metaKey: true) also flushes chip and submits once on /app/apps
+    const capturedForCmd = await adapter.insertText(sampleInstructions, { source: 'instructions' });
+    assert(capturedForCmd === true, 'insertText should capture second chip for Cmd+Enter test');
+    page.editor.dispatchEvent(
+      makeTrustedEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true })),
+    );
+    await sleep(500);
+    assert(page.sentMessages.length === 2, `Expected 2nd submit after Cmd+Enter, got ${page.sentMessages.length}`);
+    assert(page.sentMessages[1].includes('[SuperAssistant tools'), 'Cmd+Enter submitted message must contain instructions');
   });
 
   // Test 2: Pre-typed draft + Send / Chinese 发送 click merge, strict route matching, and Monaco exclusion

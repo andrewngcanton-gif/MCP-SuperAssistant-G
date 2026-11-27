@@ -712,12 +712,12 @@ export const isAistudioSendControlReady = (editor = getAistudioComposerElement()
 
 const onKeyDown = (event: KeyboardEvent): void => {
   if (!event.isTrusted) return;
-  // AI Studio sends on Ctrl+Enter by default (button.ctrl-enter-submits) or plain Enter when
-  // configured for Enter-to-submit. Shift+Enter is a newline and Meta/Alt chords are unrelated.
+  // AI Studio sends on Ctrl+Enter (Cmd+Enter on macOS) by default (button.ctrl-enter-submits) or
+  // plain Enter when configured for Enter-to-submit. Shift+Enter is a newline and Alt/dual chords are unrelated.
   if (
     event.key !== 'Enter' ||
     event.shiftKey ||
-    event.metaKey ||
+    (event.ctrlKey && event.metaKey) ||
     event.altKey ||
     event.isComposing ||
     event.keyCode === 229
@@ -725,7 +725,7 @@ const onKeyDown = (event: KeyboardEvent): void => {
   const target = event.target as Element | null;
   if (!isInsideComposer(target)) return;
   const composer = target instanceof HTMLElement ? getComposerRoot(target) : null;
-  if (!event.ctrlKey && composer?.querySelector('ms-run-button button.ctrl-enter-submits, button.ctrl-enter-submits')) {
+  if (!(event.ctrlKey || event.metaKey) && composer?.querySelector('ms-run-button button.ctrl-enter-submits, button.ctrl-enter-submits')) {
     return;
   }
   beginSubmissionCycle('user');

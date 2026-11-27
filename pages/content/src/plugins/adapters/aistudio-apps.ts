@@ -341,6 +341,8 @@ export const submitAistudioAppsInput = (
         }
         notifyAistudioAppsSubmission();
         input.focus();
+        const isMac =
+          typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent || '');
         for (const eventType of ['keydown', 'keypress', 'keyup'] as const) {
           input.dispatchEvent(
             new KeyboardEvent(eventType, {
@@ -348,7 +350,8 @@ export const submitAistudioAppsInput = (
               code: 'Enter',
               keyCode: 13,
               which: 13,
-              ctrlKey: true,
+              ctrlKey: !isMac,
+              metaKey: isMac,
               bubbles: true,
               cancelable: true,
             }),

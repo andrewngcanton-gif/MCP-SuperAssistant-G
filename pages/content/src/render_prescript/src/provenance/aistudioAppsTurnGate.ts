@@ -71,12 +71,12 @@ export const notifyAistudioAppsSubmission = (): void => {
 
 const onWindowKeydown = (e: KeyboardEvent): void => {
   if (!isAistudioAppsHost()) return;
+  const hasPrimaryModifier = (e.ctrlKey && !e.metaKey) || (e.metaKey && !e.ctrlKey);
   if (
     e.key !== 'Enter' ||
-    !e.ctrlKey ||
+    !hasPrimaryModifier ||
     e.shiftKey ||
     e.altKey ||
-    e.metaKey ||
     e.isComposing ||
     e.keyCode === 229
   ) {

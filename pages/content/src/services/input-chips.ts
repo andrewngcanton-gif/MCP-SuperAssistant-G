@@ -256,7 +256,7 @@ export function isChipSubmitEnter(
     && event.key === 'Enter'
     && (options?.allowCtrl === true || !event.ctrlKey)
     && !event.shiftKey
-    && !event.metaKey
+    && (options?.allowCtrl === true ? !(event.ctrlKey && event.metaKey) : !event.metaKey)
     && !event.altKey
     && !event.isComposing
     && event.keyCode !== 229;
@@ -729,8 +729,8 @@ class InputChipManager {
     if (!anchors) return;
     const target = e.target as Node | null;
     if (!target || !anchors.input.contains(target)) return;
-    // In AI Studio's default Ctrl+Enter mode, plain Enter inserts a newline; leave it native.
-    if (isAistudio && !e.ctrlKey && (anchors.ctrlEnterOnly || anchors.container.querySelector('ms-run-button button.ctrl-enter-submits, button.ctrl-enter-submits'))) {
+    // In AI Studio's default Ctrl+Enter / Cmd+Enter mode, plain Enter inserts a newline; leave it native.
+    if (isAistudio && !(e.ctrlKey || e.metaKey) && (anchors.ctrlEnterOnly || anchors.container.querySelector('ms-run-button button.ctrl-enter-submits, button.ctrl-enter-submits'))) {
       return;
     }
     // A merge/submit already owns this gesture: swallow a second Enter so the page cannot send

@@ -1,0 +1,93 @@
+name: Verify on macOS & Package Release Zip
+
+on:
+  pull_request:
+    branches:
+      - custom
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  macos-verify:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm type-check
+
+      - name: Run unit tests
+        run: pnpm test:unit
+
+      - name: Run DOM integration tests in macOS Chrome
+        run: pnpm test:dom
+
+      - name: Build production extension bundle
+        run: pnpm build
+
+      - name: Determine release label and package cross-platform Chrome zip
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            LABEL="${GITHUB_REF_NAME}"
+          else
+            SHORT_SHA="${GITHUB_SHA::7}"
+            LABEL="custom-${SHORT_SHA}"
+          fi
+          mkdir -p release-artifacts
+          ZIP_NAME="mcp-superassistant-g-${LABEL}-chrome.zip"
+          (cd dist && zip -qr "../release-artifacts/${ZIP_NAME}" .)
+          echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload extension zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-chrome-zip
+          path: release-artifacts/*.zip
+
+  publish-release:
+    needs: macos-verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged extension zip
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-chrome-zip
+          path: release-artifacts
+
+      - name: Attach zip to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ZIP_FILE="$(find release-artifacts -maxdepth 1 -name '*.zip' -print -quit)"
+          if gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP_FILE" --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "$TAG" "$ZIP_FILE" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "MCP SuperAssistant G ${TAG}" \
+              --generate-notes
+          fi

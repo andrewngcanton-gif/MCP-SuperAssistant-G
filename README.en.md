@@ -79,7 +79,7 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
-After the build, the project's `dist/` directory contains `manifest.json`. Keep this directory in place for Chrome to load.
+After the build, the project's `dist/` directory contains `manifest.json`. Keep this directory in place for Chrome to load (both the extension bundle and the `npx`-launched proxy are cross-platform across Windows, macOS, and Linux Chrome without OS-specific builds; you can also download and unzip a prebuilt bundle from [GitHub Releases](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/releases)).
 
 ### 3. Load the unpacked extension
 
@@ -173,14 +173,19 @@ Follow these 3 steps (using local WebCodex **0.5.0** as an example):
 
      How to get `<your WebCodex token>` (keep it local only — never commit it or share it publicly):
      - Run `webcodex login ... --print-mcp-config` with the WebCodex CLI (or `webcodex share` for a quick session) and copy the Bearer token printed in the terminal;
-     - If you signed in with **WebCodex Desktop**, look for the `webcodex-user-token` file in its local connections directory (on Windows, under `%LOCALAPPDATA%\dev.webcodex.desktop\local-connections\`, the same file Option A reads) and copy its plain-text content;
+     - If you signed in with **WebCodex Desktop**, look for the `webcodex-user-token` file in its local connections directory (on Windows, under `%LOCALAPPDATA%\dev.webcodex.desktop\local-connections\`, the same file Option A reads; on macOS, typically under `~/Library/Application Support/dev.webcodex.desktop/local-connections/`) and copy its plain-text content;
      - Or use a user API token issued directly by your self-hosted WebCodex server.
 
 3. **Start the proxy and connect in the extension**
-   - For **Option A**, start (or restart) the proxy with the command below and leave it running; for **Option B**, point `--config` to your own `./mcp-config.json`:
+   - For **Option A** (Windows PowerShell), start (or restart) the proxy with the command below and leave it running; for **Option B** (including macOS / Linux terminals), point `--config` to your own `./mcp-config.json`:
 
      ```powershell
      npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp-superassistant-webcodex.json" --outputTransport sse --port 3006
+     ```
+
+     ```bash
+     # macOS / Linux terminal (zsh / bash)
+     npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config ./mcp-config.json --outputTransport sse --port 3006
      ```
 
    - In the extension sidebar's connection settings, choose **SSE**, enter `http://localhost:3006/sse` as **Server URI**, and click **Connect**. Once **Connected**, open the **Tools** tab and confirm the WebCodex tools (such as `webcodex.list_projects` and `webcodex.run_shell`) are listed and enabled.

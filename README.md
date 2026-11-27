@@ -79,7 +79,7 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
-成功后，项目根目录下的 `dist/` 会包含 `manifest.json`。保留这个目录供 Chrome 加载。
+成功后，项目根目录下的 `dist/` 会包含 `manifest.json`。保留这个目录供 Chrome 加载（扩展本体与通过 `npx` 启动的代理均为跨平台前端/Node 产物，Windows、macOS 与 Linux Chrome 共用同一套 `dist/`，无需按系统重新编译；也可直接下载 [GitHub Releases](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/releases) 中的预构建压缩包解压使用）。
 
 ### 3. 加载已解压的扩展
 
@@ -173,14 +173,19 @@ pnpm build
 
      `<你的 WebCodex token>` 可通过以下任一方式获取（仅保存在本地配置文件，切勿提交到仓库或公开分享）：
      - 使用 WebCodex CLI 登录时带上 `--print-mcp-config`（如 `webcodex login ... --print-mcp-config`），或使用临时试用命令 `webcodex share`，终端会直接打印连接地址与对应的 Bearer token；
-     - 已登录 **WebCodex Desktop** 时，可在桌面端本地连接目录找到 `webcodex-user-token` 文件（Windows 位于 `%LOCALAPPDATA%\dev.webcodex.desktop\local-connections\` 下，即方式 A 脚本读取的同一文件），复制其中的纯文本内容；
+     - 已登录 **WebCodex Desktop** 时，可在桌面端本地连接目录找到 `webcodex-user-token` 文件（Windows 位于 `%LOCALAPPDATA%\dev.webcodex.desktop\local-connections\` 下，即方式 A 脚本读取的同一文件；macOS 通常位于 `~/Library/Application Support/dev.webcodex.desktop/local-connections/` 下），复制其中的纯文本内容；
      - 使用自建服务端时，也可直接填入由同一 WebCodex 服务端为你签发的用户 API token。
 
 3. **启动代理并在扩展中连接**
-   - 如果采用 **方式 A**，运行下面命令启动（或重启）代理并保持窗口开启；如果采用 **方式 B**，把 `--config` 换成你自己的 `./mcp-config.json` 路径：
+   - 如果采用 **方式 A**（Windows PowerShell），运行下面命令启动（或重启）代理并保持窗口开启；如果采用 **方式 B**（如 macOS / Linux 终端），把 `--config` 换成你自己的 `./mcp-config.json` 路径：
 
      ```powershell
      npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config "$env:LOCALAPPDATA/mcp-superassistant-webcodex.json" --outputTransport sse --port 3006
+     ```
+
+     ```bash
+     # macOS / Linux 终端（zsh / bash）
+     npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config ./mcp-config.json --outputTransport sse --port 3006
      ```
 
    - 打开网页侧栏的连接设置，连接类型选 **SSE**，**Server URI** 填 `http://localhost:3006/sse` 后点击 **Connect**。显示 **Connected** 后，切换到 **Tools** 标签页，确认已能看到并勾选 WebCodex 工具（例如 `webcodex.list_projects`、`webcodex.run_shell` 等）。

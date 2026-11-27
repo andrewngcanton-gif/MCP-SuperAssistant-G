@@ -521,16 +521,42 @@ async function main() {
     }
   });
 
-  // Test 6: Gemini / non-AI-Studio Enter rule preserved
+  // Test 6: Gemini / non-AI-Studio Enter rule preserved + macOS Cmd+Enter support on AI Studio
   await runTest('isChipSubmitEnter keeps plain-Enter rule for Gemini/other hosts', async () => {
     const plainEnter = { isTrusted: true, key: 'Enter', ctrlKey: false, shiftKey: false, metaKey: false, altKey: false, isComposing: false, keyCode: 13 };
     const ctrlEnter = { ...plainEnter, ctrlKey: true };
+    const metaEnter = { ...plainEnter, metaKey: true };
+    const ctrlMetaEnter = { ...plainEnter, ctrlKey: true, metaKey: true };
     const shiftEnter = { ...plainEnter, shiftKey: true };
     assert(isChipSubmitEnter(plainEnter) === true, 'Plain Enter accepted by default');
     assert(isChipSubmitEnter(ctrlEnter) === false, 'Ctrl+Enter rejected for Gemini/default hosts');
+    assert(isChipSubmitEnter(metaEnter) === false, 'Cmd+Enter rejected for Gemini/default hosts');
     assert(isChipSubmitEnter(ctrlEnter, { allowCtrl: true }) === true, 'Ctrl+Enter accepted when allowCtrl=true');
+    assert(isChipSubmitEnter(metaEnter, { allowCtrl: true }) === true, 'Cmd+Enter accepted when allowCtrl=true');
+    assert(isChipSubmitEnter(ctrlMetaEnter, { allowCtrl: true }) === false, 'Dual Ctrl+Cmd+Enter rejected even when allowCtrl=true');
     assert(isChipSubmitEnter(shiftEnter, { allowCtrl: true }) === false, 'Shift+Enter always rejected');
     assert(isAistudioDeliveryAuthorized(null) === false, 'Null provenance rejected on AI Studio');
+
+    // Verify macOS Cmd+Enter flushes chip and submits in AI Studio ctrl-enter-submits mode
+    window.__setMockPath('/prompts/new_chat');
+    const page = mountAistudioDom();
+    const adapter = setupStoresAndAdapter();
+    initializeAistudioTurnGate();
+    await automationService.initialize();
+
+    await adapter.insertText(sampleInstructions, { source: 'instructions' });
+    page.ta.value = 'cmd enter macos test';
+    page.ta.dispatchEvent(new Event('input', { bubbles: true }));
+    page.ta.dispatchEvent(makeTrustedEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })));
+    await sleep(250);
+    assert(page.sentMessages.length === 0, 'Plain Enter must stay newline in ctrl-enter-submits mode');
+
+    page.ta.dispatchEvent(
+      makeTrustedEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true })),
+    );
+    await sleep(450);
+    assert(page.sentMessages.length === 1, `Expected 1 Cmd+Enter send on AI Studio, got ${page.sentMessages.length}`);
+    assert(page.sentMessages[0].includes('[SuperAssistant tools'), 'Cmd+Enter send should include instructions');
   });
 
   // Test 7: Plain Enter still submits when ctrl-enter-submits class is absent
