@@ -537,6 +537,87 @@ async function main() {
     assert(notReadyEntries.length === 0, 'Pre-flight !isReady and context-invalid exits must not be stored in execution history');
   });
 
+  await runTest('Gemini mounts chip bar above grid .text-input-field so 3+ chips never shift or crush editor', async () => {
+    document.body.innerHTML = '';
+    const container = document.createElement('div');
+    container.className = 'input-area-container';
+    Object.assign(container.style, { display: 'block', width: '760px' });
+
+    const inputArea = document.createElement('div');
+    inputArea.className = 'input-area';
+    Object.assign(inputArea.style, { display: 'flex', flexDirection: 'column', width: '100%' });
+
+    const textInputField = document.createElement('div');
+    textInputField.className = 'text-input-field';
+    Object.assign(textInputField.style, {
+      display: 'grid',
+      gridTemplateColumns: 'auto 1fr auto',
+      width: '100%',
+      alignItems: 'center',
+    });
+
+    const leading = document.createElement('div');
+    leading.className = 'leading-actions-wrapper';
+    Object.assign(leading.style, { width: '48px', height: '40px' });
+
+    const textareaWrapper = document.createElement('div');
+    textareaWrapper.className = 'text-input-field_textarea-wrapper';
+    Object.assign(textareaWrapper.style, { minWidth: '0', width: '100%' });
+
+    const editor = document.createElement('div');
+    editor.className = 'ql-editor textarea new-input-ui';
+    editor.setAttribute('contenteditable', 'true');
+    Object.assign(editor.style, { display: 'block', width: '100%', minHeight: '40px' });
+    textareaWrapper.appendChild(editor);
+
+    const trailing = document.createElement('div');
+    trailing.className = 'trailing-actions-wrapper';
+    Object.assign(trailing.style, { width: '200px', height: '40px' });
+    const micBtn = document.createElement('button');
+    micBtn.type = 'button';
+    micBtn.setAttribute('aria-label', 'Microphone');
+    trailing.appendChild(micBtn);
+
+    textInputField.append(leading, textareaWrapper, trailing);
+    inputArea.appendChild(textInputField);
+    container.appendChild(inputArea);
+    document.body.appendChild(container);
+
+    const adapter = setupGeminiAdapter();
+    const baseline = editor.getBoundingClientRect();
+    assert(baseline.width > 0 && baseline.height > 0, `Expected non-zero baseline editor box, got ${baseline.width}x${baseline.height}`);
+
+    for (let i = 1; i <= 3; i++) {
+      const ok = await adapter.insertText(`<function_result call_id="${i}">tool output payload ${i} ${'x'.repeat(240)}</function_result>`, {
+        source: 'tool-result',
+      });
+      assert(ok, `insertText #${i} must succeed`);
+
+      const chipHost = document.getElementById('mcp-input-chips-host');
+      assert(chipHost !== null, `Chip host must exist after insert #${i}`);
+      assert(
+        chipHost!.parentElement === inputArea,
+        `Chip host must mount in .input-area (not .text-input-field), got ${chipHost!.parentElement?.className}`,
+      );
+
+      const rect = editor.getBoundingClientRect();
+      assert(
+        Math.abs(rect.left - baseline.left) <= 1,
+        `Editor left shifted after insert #${i}: baseline=${baseline.left}, got=${rect.left}`,
+      );
+      assert(
+        rect.width > 0 && Math.abs(rect.width - baseline.width) <= 1,
+        `Editor width changed after insert #${i}: baseline=${baseline.width}, got=${rect.width}`,
+      );
+      assert(rect.height > 0, `Editor height collapsed after insert #${i}: ${rect.height}`);
+    }
+
+    const chipHost = document.getElementById('mcp-input-chips-host');
+    const renderedChips = chipHost?.shadowRoot?.querySelectorAll('.chip') ?? [];
+    assert(renderedChips.length === 3, `Expected 3 rendered chips, got ${renderedChips.length}`);
+    inputChips.teardown();
+  });
+
   window.__testResults = results;
   window.__testsDone = true;
 }

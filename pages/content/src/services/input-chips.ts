@@ -136,6 +136,11 @@ const ACCENTS: Record<ChipSource, string> = {
 // accent survives only in the roundel + a 2px inset left hint.
 const CHIP_STYLES = `
   :host {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    flex-shrink: 0;
+    grid-column: 1 / -1;
     --host-font: system-ui, -apple-system, sans-serif;
     --host-font-size: 13px;
     --host-fg: #1f1f1f;
@@ -145,9 +150,13 @@ const CHIP_STYLES = `
     --chip-border: rgba(0, 0, 0, 0.14);
     --chip-muted: rgba(0, 0, 0, 0.55);
   }
-  .bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; position: relative; }
+  .bar {
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; padding: 4px 0;
+    max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: thin; position: relative; box-sizing: border-box;
+  }
   .chip {
-    display: inline-flex; align-items: center; gap: 6px; max-width: 260px;
+    display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; max-width: 210px;
     font-family: var(--host-font);
     border-radius: var(--host-radius); padding: 3px 6px 3px 5px; cursor: pointer;
     border: 1px solid var(--chip-border);

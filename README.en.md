@@ -31,6 +31,11 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## Changelog
 
+### v0.1.7
+
+- **Fixed Gemini's input cursor shifting or disappearing after inserting multiple tool results.** Switched the chip bar to a single-row horizontally scrollable strip and mounted it in the vertical composer wrapper above Gemini's `.text-input-field` so inserting 3+ tool results no longer crowds or hides the editor cursor.
+- **Prevented 400 invalid-argument errors on `work_on_project` first calls.** Surfaced conditional required-parameter selectors (such as `project | client_id+path | session_id` and `oneOf`/`anyOf` schemas) in compact tool signatures so models do not omit the project source.
+
 ### v0.1.6
 
 - **Added multi-language UI support, starting with Simplified Chinese and English.** Follows your browser language automatically by default, and can be switched live at any time from Sidebar **Settings** or the extension Options page with instant cross-tab sync; tool instructions sent to AI stay in English.

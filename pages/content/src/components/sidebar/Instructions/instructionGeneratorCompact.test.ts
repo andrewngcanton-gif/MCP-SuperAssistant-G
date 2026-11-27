@@ -131,6 +131,39 @@ test('formatCompactParamSignature extracts concise required signatures while str
     ),
     '(files: object[], paths: string[], limit: int, dry_run: bool, opts: object, …)',
   );
+  assert.equal(
+    formatCompactParamSignature(
+      JSON.stringify({
+        type: 'object',
+        properties: {
+          project: { type: 'string' },
+          client_id: { type: 'string' },
+          path: { type: 'string' },
+          session_id: { type: 'string' },
+          instruction: { type: 'string' },
+          _wc: { type: 'object' },
+        },
+        required: ['instruction'],
+      }),
+    ),
+    '(project | client_id+path | session_id, instruction)',
+  );
+  assert.equal(
+    formatCompactParamSignature(
+      JSON.stringify({
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          owner: { type: 'string' },
+          repo: { type: 'string' },
+          action: { type: 'string' },
+        },
+        required: ['action'],
+        oneOf: [{ required: ['id'] }, { required: ['owner', 'repo'] }],
+      }),
+    ),
+    '(id | owner+repo, action)',
+  );
 });
 
 test('generateInstructionsCompact includes inline core signatures to skip Turn-1 schema lookup', () => {

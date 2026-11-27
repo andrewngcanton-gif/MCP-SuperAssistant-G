@@ -89,9 +89,63 @@ const formatCompactTypeHint = (propSchema: unknown): string => {
   }
 };
 
+const extractConditionalSelector = (
+  obj: Record<string, unknown>,
+  props: Record<string, unknown> | null,
+  requiredSet: Set<string>,
+): string => {
+  const variants = Array.isArray(obj.oneOf) ? obj.oneOf : Array.isArray(obj.anyOf) ? obj.anyOf : null;
+  if (variants && variants.length >= 2 && variants.length <= 4) {
+    const branches: string[] = [];
+    for (const variant of variants) {
+      if (!variant || typeof variant !== 'object' || Array.isArray(variant)) {
+        branches.length = 0;
+        break;
+      }
+      const req = (variant as Record<string, unknown>).required;
+      if (!Array.isArray(req)) {
+        branches.length = 0;
+        break;
+      }
+      const keys = req.filter(
+        (name): name is string =>
+          typeof name === 'string' && !INTERNAL_SCHEMA_KEYS.has(name) && !requiredSet.has(name),
+      );
+      if (keys.length === 0) {
+        branches.length = 0;
+        break;
+      }
+      branches.push(keys.join('+'));
+    }
+    if (branches.length >= 2) {
+      return branches.join(' | ');
+    }
+  }
+
+  // WebCodex work_on_project enforces (project | client_id+path | session_id) at runtime while
+  // only declaring `instruction` in top-level `required`. Surface that mutually exclusive selector
+  // so models do not invoke work_on_project({ instruction }) without resolving a project first.
+  if (
+    props &&
+    'project' in props &&
+    'client_id' in props &&
+    'path' in props &&
+    !requiredSet.has('project') &&
+    !requiredSet.has('client_id') &&
+    !requiredSet.has('path') &&
+    !requiredSet.has('session_id')
+  ) {
+    return 'session_id' in props ? 'project | client_id+path | session_id' : 'project | client_id+path';
+  }
+
+  return '';
+};
+
 /**
  * Format an ultra-compact required-parameter signature such as `()` or `(project, command)`
  * from a tool's JSON Schema string/object, omitting internal transport keys (`_wc`).
+ * Also surfaces conditional `oneOf`/`anyOf` selectors (and WebCodex project-source selectors)
+ * so models do not omit mutually exclusive required parameters.
  * Returns `''` when the schema lacks object structure (e.g. `{}` or invalid JSON).
  */
 export const formatCompactParamSignature = (schema?: string | Record<string, unknown>): string => {
@@ -114,19 +168,24 @@ export const formatCompactParamSignature = (schema?: string | Record<string, unk
       ? (obj.properties as Record<string, unknown>)
       : null;
   const req = Array.isArray(obj.required) ? obj.required : null;
-  if (obj.type !== 'object' && !props && !req) return '';
+  const hasVariants = Array.isArray(obj.oneOf) || Array.isArray(obj.anyOf);
+  if (obj.type !== 'object' && !props && !req && !hasVariants) return '';
 
   const requiredNames = (req ?? [])
     .filter((name): name is string => typeof name === 'string' && !INTERNAL_SCHEMA_KEYS.has(name));
-  if (requiredNames.length === 0) return '()';
+  const selector = extractConditionalSelector(obj, props, new Set(requiredNames));
+  if (!selector && requiredNames.length === 0) return '()';
 
   const maxParams = 5;
-  const formatted = requiredNames.slice(0, maxParams).map(name => {
+  const parts: string[] = [];
+  if (selector) parts.push(selector);
+  const remainingSlots = Math.max(0, maxParams - parts.length);
+  for (const name of requiredNames.slice(0, remainingSlots)) {
     const hint = props ? formatCompactTypeHint(props[name]) : '';
-    return hint ? `${name}: ${hint}` : name;
-  });
-  if (requiredNames.length > maxParams) formatted.push('…');
-  return `(${formatted.join(', ')})`;
+    parts.push(hint ? `${name}: ${hint}` : name);
+  }
+  if (requiredNames.length > remainingSlots) parts.push('…');
+  return `(${parts.join(', ')})`;
 };
 
 const splitToolNamespace = (name: string): { prefix: string; base: string } => {

@@ -283,7 +283,7 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     if (!found) return null;
     // Keep anchoring on the editor wrapper (legacy behaviour) while resolving the visible editor.
     const input = ((found.closest('.ql-editor') as HTMLElement | null) ?? found);
-    const container = this.resolveComposerRoot(input) as HTMLElement;
+    const container = this.resolveChipContainer(input);
     if (!container) return null;
     return { input, container, submitButtonSelector: this.getSelector('submitButton') };
   }
@@ -487,6 +487,36 @@ export class GeminiAdapter extends BaseAdapterPlugin {
     }
 
     return firstKnown ?? input.parentElement ?? input;
+  }
+
+  /**
+   * Resolve a vertical-stacking ancestor above `.text-input-field` for mounting `#mcp-input-chips-host`.
+   * Prepending directly inside `.text-input-field` puts the chip host into Gemini's internal CSS Grid
+   * or horizontal flex row, shifting `.ql-editor` sideways and crushing it when 3+ chips are added.
+   */
+  private resolveChipContainer(input: HTMLElement): HTMLElement | null {
+    const composerRoot = this.resolveComposerRoot(input) as HTMLElement | null;
+    if (!composerRoot) return null;
+
+    const stopSelector = 'main, [role="main"], .chat-web, .main-content, .conversation-container';
+    const isSafeVerticalContainer = (el: HTMLElement): boolean => {
+      if (el.matches('.text-input-field')) return false;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'block' || cs.display === 'flow-root') return true;
+      if ((cs.display === 'flex' || cs.display === 'inline-flex') && cs.flexDirection === 'column') return true;
+      return false;
+    };
+
+    let node: HTMLElement | null = composerRoot;
+    for (
+      let depth = 0;
+      node && depth < 8 && node !== document.body && node !== document.documentElement && !node.matches(stopSelector);
+      depth++, node = node.parentElement
+    ) {
+      if (isSafeVerticalContainer(node)) return node;
+    }
+
+    return composerRoot;
   }
 
   private resolveComposerContext(): GeminiComposerContext | null {

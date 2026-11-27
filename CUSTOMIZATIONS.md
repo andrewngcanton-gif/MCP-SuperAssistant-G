@@ -44,6 +44,16 @@ After changing the toggle, re-run the generator and restart the proxy; the runni
 
 Detailed implementation-level notes for each release and fix. User-facing summaries live in [README.md](README.md) and [README.en.md](README.en.md).
 
+### v0.1.7
+
+- **Gemini multi-chip composer layout fix and single-row chip scrolling (`gemini.adapter.ts`, `input-chips.ts`, `scripts/dom-tests/gemini.test.ts`).**
+  - Root cause: `GeminiAdapter.getChipAnchors()` previously returned `resolveComposerRoot(input)`, which resolved to `.text-input-field` — Gemini's internal CSS Grid / horizontal flex composer container. Prepending `#mcp-input-chips-host` directly inside `.text-input-field` placed the chip bar into a horizontal track alongside `.ql-editor`, shifting the caret right on chips #1–#2 and crushing `.ql-editor` to zero width on chip #3+.
+  - Fix: Added `resolveChipContainer(input)` in `gemini.adapter.ts` (keeping `resolveComposerRoot()` intact for send/stop control scoping) to skip `.text-input-field`, grids, and horizontal flex rows and mount `#mcp-input-chips-host` in the nearest vertical-stacking composer ancestor (`block` / `flow-root` / `flex-direction: column`) below main chat boundaries; updated `CHIP_STYLES` in `input-chips.ts` to single-row horizontal scroll (`flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;`, `.chip { flex-shrink: 0; max-width: 210px; }`) with `:host { grid-column: 1 / -1; }` defense-in-depth.
+  - Regression test: Added a headless Chrome DOM test in `scripts/dom-tests/gemini.test.ts` reproducing `.input-area-container` → `.input-area (flex column)` → `.text-input-field (grid: auto 1fr auto)` → `.ql-editor` and asserting mount target plus unchanged `left`/`width`/`height` across 3 inserted `tool-result` chips.
+- **Conditional required-parameter signatures in Compact instructions (`instructionGeneratorCompact.ts`, `instructionGeneratorCompact.test.ts`).**
+  - Root cause: `formatCompactParamSignature()` previously inspected only top-level `required`, emitting `work_on_project(instruction)` and causing models to omit the runtime-required `project` / `client_id+path` / `session_id` selector and hit HTTP 400 (`-32602`).
+  - Fix: Added `extractConditionalSelector()` to surface `oneOf`/`anyOf` required-key branches and WebCodex's mutually exclusive `project | client_id+path | session_id` selector in compact signatures, with unit test coverage in `instructionGeneratorCompact.test.ts`.
+
 ### v0.1.6
 
 - **Shared, zero-Suspense UI i18n engine (`packages/shared/lib/i18n/*`, `packages/shared/index.mts`, `packages/shared/tests/i18n.test.ts`).**
