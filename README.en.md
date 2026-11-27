@@ -36,7 +36,7 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 - **Fixed Gemini's input cursor shifting or disappearing after inserting multiple tool results.** Switched the chip bar to a single-row horizontally scrollable strip and mounted it in the vertical composer wrapper above Gemini's `.text-input-field` so inserting 3+ tool results no longer crowds or hides the editor cursor.
 - **Prevented 400 invalid-argument errors on `work_on_project` first calls.** Surfaced conditional required-parameter selectors (such as `project | client_id+path | session_id` and `oneOf`/`anyOf` schemas) in compact tool signatures so models do not omit the project source.
 
-> For earlier releases, see the [full changelog (CHANGELOG.en.md)](CHANGELOG.en.md). For implementation-level notes, see [CUSTOMIZATIONS.en.md](CUSTOMIZATIONS.en.md).
+> For earlier releases, see the [full changelog (CHANGELOG.en.md)](CHANGELOG.en.md).
 
 ## Bug fixes
 
@@ -380,7 +380,7 @@ If you don't want to manually open **WebCodex Desktop** or keep a terminal windo
 
 ## Known issues
 
-- **Gemini may forget the tool descriptions in long conversations.** If it stops following the tool instructions, use **Insert** or **Attach** in the **MCP** menu next to the composer, then send the current MCP Instructions again.
+- **Gemini may drift from tool-calling rules in long conversations.** If it stops following the calling format, open the **MCP** hover menu next to the composer and click **Remind** (or **规则提醒** in Simplified Chinese) to insert a lightweight rule reminder. Because the full tool list and parameter descriptions sent earlier are already in the conversation history, the model only needs a brief format nudge rather than re-sending the entire MCP Instructions via **Insert** or **Attach**, which saves significant tokens—re-send the full instructions only in a new chat or after changing enabled tools.
 - **Tool calls can return HTTP 400 or time out.** The model can sometimes recover by switching tools. The MCP Instructions explicitly tell the model to switch from WebCodex's `edit_project_files` to `run_shell` on the same server after the first error, if available. Recovery from other tool errors or timeouts depends on the model and the error. If a file edit times out, check whether the file changed before retrying.
 - **Tested environment.** This extension has only been tested in Chrome on Windows 11.
 
