@@ -8,7 +8,7 @@
   <strong>中文</strong> &bull; <a href="README.en.md">English</a>
 </p>
 
-**MCP SuperAssistant G** 是基于 [原版 MCP SuperAssistant v0.7.3](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3) 的社区增强版 Chrome 扩展，让 Gemini 网页版、Google AI Studio 等网页 AI 直接使用本地 MCP 工具。相比原版，重点修复了自动发送与历史对话回放问题，大幅精简了省 token 的工具说明，并针对 WebCodex 与 RTK 做了开箱适配。本项目通过 GitHub 提供源码，按下方步骤自行构建后在 Chrome 开发者模式加载即可使用。
+**MCP SuperAssistant G** 是基于 [原版 MCP SuperAssistant v0.7.3](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3) 的社区增强版 Chrome 扩展，让 Gemini 网页版、Google AI Studio 等网页 AI 直接使用本地 MCP 工具。相比原版，重点修复了自动发送与历史对话回放问题，大幅精简了省 token 的工具说明，并针对 WebCodex 与 RTK 做了开箱适配。可直接下载 [GitHub Releases](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/releases) 中的预构建扩展包在 Chrome 开发者模式加载使用，也可从源码自行构建。
 
 原版基线为 `30bb204`。 [`main` 保存原版源码快照，`custom` 是本项目的默认分支](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/compare/main...custom)。
 
@@ -20,12 +20,11 @@
 - [相比原版修复了什么](#相比原版修复了什么)
 - [新功能与改进](#新功能与改进)
 - [在 Chrome 中安装](#在-chrome-中安装)
-  - [1. 准备构建环境](#1-准备构建环境)
-  - [2. 获取源码并构建](#2-获取源码并构建)
-  - [3. 加载已解压的扩展](#3-加载已解压的扩展)
-  - [4. 连接 MCP 服务器](#4-连接-mcp-服务器)
+  - [1. 下载预构建扩展包（推荐）](#1-下载预构建扩展包推荐)
+  - [2. 加载已解压的扩展](#2-加载已解压的扩展)
+  - [3. 连接 MCP 服务器](#3-连接-mcp-服务器)
     - [与 WebCodex 配合使用](#与-webcodex-配合使用)
-  - [5. 试跑并更新](#5-试跑并更新)
+  - [4. 试跑并更新](#4-试跑并更新)
 - [已知问题](#已知问题)
 - [许可证](#许可证)
 
@@ -58,37 +57,26 @@
 
 ## 在 Chrome 中安装
 
-### 1. 准备构建环境
+### 1. 下载预构建扩展包（推荐）
 
-- 安装 Git、Node.js **22.13.0 或更新版本**以及 Chrome。
-- 使用 **pnpm 9.15.1**。如果没有这个版本，可在终端运行以下命令安装。
+1. 前往 [GitHub Releases](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/releases) 下载最新版本的 **`mcp-superassistant-g-vX.Y.Z-chrome.zip`**（扩展本体为跨平台前端产物，Windows、macOS 与 Linux Chrome 共用同一份压缩包）。
+2. 将压缩包解压到一个**长期保留**的固定文件夹（例如 `mcp-superassistant-g/`，不要解压在随时会被清理的临时目录中）。
 
-```bash
-npm install --global pnpm@9.15.1
-pnpm --version
-```
+> [!NOTE]
+> **解压后没有 `dist/` 文件夹是正常的**：Release `.zip` 直接打包了构建产物本身，解压后的文件夹根目录就是 **`manifest.json`**（无需再找 `dist/` 子目录）。使用预构建包也**无需安装 Git 或 pnpm**；仅在需要通过 `npx` 启动本地 Proxy 时才需要 Node.js。
 
-Windows 用户可直接在 **Git Bash** 里执行下面的构建命令。若使用 PowerShell，先用 `bash --version` 确认终端可以找到 Bash，构建脚本会调用它。
+如果你希望跟随最新源码提交或自行修改打包，请见 **[从源码自行构建指南（BUILD_FROM_SOURCE.md）](BUILD_FROM_SOURCE.md)**。
 
-### 2. 获取源码并构建
-
-```bash
-git clone --branch custom --single-branch https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G.git
-cd MCP-SuperAssistant-G
-pnpm install --frozen-lockfile
-pnpm build
-```
-
-成功后，项目根目录下的 `dist/` 会包含 `manifest.json`。保留这个目录供 Chrome 加载（扩展本体与通过 `npx` 启动的代理均为跨平台前端/Node 产物，Windows、macOS 与 Linux Chrome 共用同一套 `dist/`，无需按系统重新编译；也可直接下载 [GitHub Releases](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/releases) 中的预构建压缩包解压使用）。
-
-### 3. 加载已解压的扩展
+### 2. 加载已解压的扩展
 
 1. 在 Chrome 地址栏打开 `chrome://extensions/`，打开右上角的 **开发者模式**。
 2. 如果已安装原版或其他同名构建，先停用它们，避免同一个网页有两套扩展脚本运行。
-3. 点击 **加载已解压的扩展程序**，选择刚构建的 **`MCP-SuperAssistant-G/dist`**，也就是直接包含 `manifest.json` 的目录。
+3. 点击 **加载已解压的扩展程序**，选择直接包含 `manifest.json` 的目录：
+   - **使用 Release 预构建包**：直接选择刚才解压出来的文件夹本身；
+   - **从源码自行构建**：选择 `MCP-SuperAssistant-G/dist`。
 4. 打开 Gemini 或 Google AI Studio 的聊天页面。若标签页之前已经打开，刷新一下，再找输入框附近的 **MCP** 按钮或页面侧栏。
 
-### 4. 连接 MCP 服务器
+### 3. 连接 MCP 服务器
 
 如果已经有扩展可访问的 MCP 服务地址，直接在侧栏配置相应的连接类型和地址。有本地 `stdio` 工具，或希望把多个服务汇总成一个地址时，可以使用原版 MCP SuperAssistant Proxy。
 
@@ -120,14 +108,17 @@ pnpm build
 
 Proxy 启动后，在扩展侧栏连接设置中选 **SSE**、**Server URI** 填 `http://localhost:3006/sse` 点击 **Connect**，并在 **Tools** 标签页确认 WebCodex 工具已启用即可开始使用。
 
-### 5. 试跑并更新
+### 4. 试跑并更新
 
 - 在聊天输入框旁打开 **MCP** 菜单，点 **Insert** 加入 MCP Instructions，再输入一条只读测试请求一起发送（接 WebCodex 时可直接发「列出我的 WebCodex 项目」验证 `list_projects`）。模型生成工具卡片后，先手动点 **Run** 验证，再按需开启自动执行、插入和发送。
 
 > [!TIP]
 > **体验最佳建议**：验证首次工具调用正常后，推荐同时开启 **自动执行**、**自动插入**、**自动发送** 三个自动选项，实现多轮工具调用自动闭环，整体体验最佳。
 
-- 更新时，在项目目录执行 `git pull --ff-only`、`pnpm install --frozen-lockfile` 和 `pnpm build`。回到 `chrome://extensions/` 点本扩展的 **重新加载**，再刷新已打开的聊天页。遇到 `Extension context is invalid` 时，也应刷新聊天页重新注入扩展脚本。
+- 更新时：
+  - **使用 Release 预构建包**：下载新版 `.zip` 覆盖解压到同一固定目录，回到 `chrome://extensions/` 点击本扩展的 **重新加载**，再刷新已打开的聊天页。
+  - **从源码构建**：见 [更新源码并重新构建](BUILD_FROM_SOURCE.md#更新源码并重新构建)。
+  - 遇到 `Extension context is invalid` 时，同样需要刷新聊天页重新注入扩展脚本。
 
 ## 已知问题
 

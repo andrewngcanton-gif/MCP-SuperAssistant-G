@@ -8,7 +8,7 @@
   <a href="README.md">中文</a> &bull; <strong>English</strong>
 </p>
 
-**MCP SuperAssistant G** is a community-enhanced Chrome extension based on [MCP SuperAssistant v0.7.3](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3) that lets web chats such as Gemini Web and Google AI Studio use local MCP tools directly. Compared to upstream, it focuses on fixing auto-submit and historical replay issues, shrinking tool prompts to save tokens, and adding out-of-the-box support for WebCodex and RTK. This repository provides the source—build it and load it in Chrome Developer mode.
+**MCP SuperAssistant G** is a community-enhanced Chrome extension based on [MCP SuperAssistant v0.7.3](https://github.com/srbhptl39/MCP-SuperAssistant/tree/v0.7.3) that lets web chats such as Gemini Web and Google AI Studio use local MCP tools directly. Compared to upstream, it focuses on fixing auto-submit and historical replay issues, shrinking tool prompts to save tokens, and adding out-of-the-box support for WebCodex and RTK. Download a prebuilt bundle from [GitHub Releases](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/releases) to load directly in Chrome Developer mode, or build from source.
 
 The upstream baseline is commit `30bb204`. [`main` holds the upstream source snapshot, and `custom` is this project's default branch](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/compare/main...custom).
 
@@ -20,12 +20,11 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 - [Bug fixes](#bug-fixes)
 - [New features and improvements](#new-features-and-improvements)
 - [Install in Chrome](#install-in-chrome)
-  - [1. Install the prerequisites](#1-install-the-prerequisites)
-  - [2. Clone and build](#2-clone-and-build)
-  - [3. Load the unpacked extension](#3-load-the-unpacked-extension)
-  - [4. Connect an MCP server](#4-connect-an-mcp-server)
+  - [1. Download the prebuilt extension (recommended)](#1-download-the-prebuilt-extension-recommended)
+  - [2. Load the unpacked extension](#2-load-the-unpacked-extension)
+  - [3. Connect an MCP server](#3-connect-an-mcp-server)
     - [Connect WebCodex](#connect-webcodex)
-  - [5. Test and update](#5-test-and-update)
+  - [4. Test and update](#4-test-and-update)
 - [Known issues](#known-issues)
 - [License](#license)
 
@@ -58,37 +57,26 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## Install in Chrome
 
-### 1. Install the prerequisites
+### 1. Download the prebuilt extension (recommended)
 
-- Install Git, Node.js **22.13.0 or later**, and Chrome.
-- Use **pnpm 9.15.1**. If you need it, run the following commands in a terminal.
+1. Download the latest **`mcp-superassistant-g-vX.Y.Z-chrome.zip`** from [GitHub Releases](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/releases) (cross-platform bundle shared across Windows, macOS, and Linux Chrome).
+2. Extract the archive into a **permanent** folder (for example `mcp-superassistant-g/`, not a temporary folder that might be cleaned up).
 
-```bash
-npm install --global pnpm@9.15.1
-pnpm --version
-```
+> [!NOTE]
+> **There is no `dist/` subfolder after unzipping—this is intentional**: the Release `.zip` packages the built files directly at the archive root, so **`manifest.json`** sits right inside the extracted folder. You also **do not need Git or pnpm** for the prebuilt package; Node.js is only required if you launch the local proxy with `npx`.
 
-On Windows, run the commands below in **Git Bash**. If you prefer PowerShell, run `bash --version` first to make sure it can find Bash, which the build scripts use.
+If you want to track the latest commits or build locally, see **[Build from Source Guide (BUILD_FROM_SOURCE.en.md)](BUILD_FROM_SOURCE.en.md)**.
 
-### 2. Clone and build
-
-```bash
-git clone --branch custom --single-branch https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G.git
-cd MCP-SuperAssistant-G
-pnpm install --frozen-lockfile
-pnpm build
-```
-
-After the build, the project's `dist/` directory contains `manifest.json`. Keep this directory in place for Chrome to load (both the extension bundle and the `npx`-launched proxy are cross-platform across Windows, macOS, and Linux Chrome without OS-specific builds; you can also download and unzip a prebuilt bundle from [GitHub Releases](https://github.com/andrewngcanton-gif/MCP-SuperAssistant-G/releases)).
-
-### 3. Load the unpacked extension
+### 2. Load the unpacked extension
 
 1. Open `chrome://extensions/` and turn on **Developer mode**.
 2. If you have the upstream extension or another build installed, disable those copies to avoid running two content scripts on the same site.
-3. Click **Load unpacked** and select **`MCP-SuperAssistant-G/dist`**, the directory containing `manifest.json`.
+3. Click **Load unpacked** and select the directory that directly contains `manifest.json`:
+   - **Prebuilt Release zip**: select the extracted folder itself;
+   - **Built from source**: select `MCP-SuperAssistant-G/dist`.
 4. Open a Gemini or Google AI Studio chat. Refresh any chat tab that was already open and look for the **MCP** button near the composer or the sidebar.
 
-### 4. Connect an MCP server
+### 3. Connect an MCP server
 
 If you already have an MCP endpoint that the extension can reach, enter its transport type and URL in the sidebar. For local `stdio` tools or to expose multiple servers through one endpoint, use the upstream MCP SuperAssistant Proxy.
 
@@ -120,14 +108,17 @@ Web AI (Gemini / AI Studio) ←→ Browser Extension ←→ Local Proxy (SSE) �
 
 Once the proxy is running, choose **SSE** in the extension sidebar's connection settings, enter `http://localhost:3006/sse` as **Server URI**, click **Connect**, and verify the WebCodex tools in the **Tools** tab.
 
-### 5. Test and update
+### 4. Test and update
 
 - Open the **MCP** menu by the composer, click **Insert** to add MCP Instructions, and send them with a read-only test request (with WebCodex, ask it to list your projects to verify `list_projects`). When the model produces a tool card, click **Run** to test it manually before enabling any automatic execution, insertion, or submission.
 
 > [!TIP]
 > **Best experience**: Once your first tool call succeeds, turning on all three auto options (**Auto Execute**, **Auto Insert**, and **Auto Submit**) gives the smoothest end-to-end multi-turn workflow.
 
-- To update, run `git pull --ff-only`, `pnpm install --frozen-lockfile`, and `pnpm build` in the project directory. Click **Reload** for this extension in `chrome://extensions/` and refresh open chat tabs. If you see `Extension context is invalid`, refresh the chat tab to load the current content script.
+- To update:
+  - **Prebuilt Release zip**: download the newer `.zip`, extract it over the same folder, click **Reload** for this extension in `chrome://extensions/`, and refresh open chat tabs.
+  - **Built from source**: see [Update and rebuild](BUILD_FROM_SOURCE.en.md#update-and-rebuild).
+  - If you see `Extension context is invalid`, refresh the chat tab to load the current content script.
 
 ## Known issues
 
