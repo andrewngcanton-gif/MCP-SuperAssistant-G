@@ -60,7 +60,7 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ### 1. Install the prerequisites
 
-- Install Git, Node.js **22.12.0 or later**, and Chrome.
+- Install Git, Node.js **22.13.0 or later**, and Chrome.
 - Use **pnpm 9.15.1**. If you need it, run the following commands in a terminal.
 
 ```bash
