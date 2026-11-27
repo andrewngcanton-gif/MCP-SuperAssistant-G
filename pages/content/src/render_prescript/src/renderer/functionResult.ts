@@ -2,10 +2,14 @@ import { CONFIG } from '../core/config';
 import { rememberAistudioRenderedChunk } from '../provenance/aistudioTurnGate';
 import { applyThemeClass, isDarkTheme } from '../utils/themeDetector';
 import { createLogger } from '@extension/shared/lib/logger';
+import { bindI18nDomSync, setI18nAttr, setI18nText, type MessageKey } from '@extension/shared';
 
 // State management for rendered elements
 
 const logger = createLogger('FunctionResultRenderer');
+if (typeof document !== 'undefined') {
+  bindI18nDomSync(document);
+}
 
 export const processedResultElements = new WeakSet<HTMLElement>();
 export const renderedFunctionResults = new Map<string, HTMLDivElement>();
@@ -16,9 +20,9 @@ export const renderedFunctionResults = new Map<string, HTMLDivElement>();
 interface ExpandableConfig {
   blockId: string;
   className: string;
-  headerText: string;
-  expandTitle: string;
-  collapseTitle: string;
+  headerKey: MessageKey;
+  expandTitleKey: MessageKey;
+  collapseTitleKey: MessageKey;
   callId?: string;
 }
 
@@ -67,7 +71,7 @@ const createExpandableHeader = (
 
   const nameText = document.createElement('div');
   nameText.className = 'function-name-text';
-  nameText.textContent = config.headerText;
+  setI18nText(nameText, config.headerKey);
   leftSection.appendChild(nameText);
 
   // Create right section
@@ -90,7 +94,7 @@ const createExpandableHeader = (
       <path d="M8 10l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   `;
-  expandButton.title = config.expandTitle;
+  setI18nAttr(expandButton, 'title', config.expandTitleKey);
   rightSection.appendChild(expandButton);
 
   header.appendChild(leftSection);
@@ -133,7 +137,7 @@ const setupExpandCollapse = (
         if (expandIcon) {
           expandIcon.setAttribute('d', 'M8 10l4 4 4-4');
         }
-        expandButton.title = config.expandTitle;
+        setI18nAttr(expandButton, 'title', config.expandTitleKey);
       });
     } else {
       // Expand
@@ -156,7 +160,7 @@ const setupExpandCollapse = (
         if (expandIcon) {
           expandIcon.setAttribute('d', 'M16 14l-4-4-4 4');
         }
-        expandButton.title = config.collapseTitle;
+        setI18nAttr(expandButton, 'title', config.collapseTitleKey);
       });
     }
   };
@@ -215,9 +219,9 @@ const renderSystemMessageBox = (block: HTMLElement, content: string): void => {
     const config: ExpandableConfig = {
       blockId,
       className: 'system-message-container',
-      headerText: 'MCP SuperAssistant context',
-      expandTitle: 'Expand system message',
-      collapseTitle: 'Collapse system message',
+      headerKey: 'card.systemContextTitle',
+      expandTitleKey: 'card.expandSystemMsg',
+      collapseTitleKey: 'card.collapseSystemMsg',
     };
 
     const { header, expandButton } = createExpandableHeader(config);
@@ -418,9 +422,9 @@ export const renderFunctionResult = (block: HTMLElement, isProcessingRef: { curr
       const config: ExpandableConfig = {
         blockId,
         className: 'function-result-container',
-        headerText: 'Tool result',
-        expandTitle: 'Expand function result',
-        collapseTitle: 'Collapse function result',
+        headerKey: 'card.toolResultTitle',
+        expandTitleKey: 'card.expandToolResult',
+        collapseTitleKey: 'card.collapseToolResult',
         callId,
       };
 

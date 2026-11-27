@@ -4,6 +4,7 @@ import { storeExecutedFunction, generateContentSignature } from '../mcpexecute/s
 import { checkAndDisplayFunctionHistory, createHistoryPanel, updateHistoryPanel } from './functionHistory';
 import { extractJSONParameters, stripLanguageTags, extractCleanContent } from '../parser/jsonFunctionParser';
 import { createLogger } from '@extension/shared/lib/logger';
+import { bindI18nDomSync, clearI18nText, setI18nAttr, setI18nText, t } from '@extension/shared';
 import {
   claimAistudioAutomaticInvocation,
   createAistudioInvocationId,
@@ -20,6 +21,9 @@ import { canAistudioAppsAutoExecute, isAistudioAppsHost } from '../provenance/ai
 // Add type declarations for the global adapter and mcpClient access
 
 const logger = createLogger('AdapterAccess');
+if (typeof document !== 'undefined') {
+  bindI18nDomSync(document);
+}
 
 declare global {
   interface Window {
@@ -258,7 +262,7 @@ export const addRawXmlToggle = (blockDiv: HTMLDivElement, rawContent: string): v
   // Create toggle button with optimized element creation
   const toggleBtn = createOptimizedElement('button', {
     className: 'raw-toggle',
-    innerHTML: `${ICONS.CODE}<span>View raw</span>`,
+    innerHTML: `${ICONS.CODE}<span></span>`,
     styles: {
       display: 'flex',
       alignItems: 'center',
@@ -269,6 +273,7 @@ export const addRawXmlToggle = (blockDiv: HTMLDivElement, rawContent: string): v
 
   // Cache references for performance
   const textSpan = toggleBtn.querySelector('span')!;
+  setI18nText(textSpan, 'card.viewRaw');
   let isVisible = false;
 
   // Optimized toggle handler with requestAnimationFrame for smooth transitions
@@ -278,7 +283,7 @@ export const addRawXmlToggle = (blockDiv: HTMLDivElement, rawContent: string): v
     // Use requestAnimationFrame for smooth visual updates
     requestAnimationFrame(() => {
       rawXmlContainer.style.display = isVisible ? 'block' : 'none';
-      textSpan.textContent = isVisible ? 'Hide raw' : 'View raw';
+      setI18nText(textSpan, isVisible ? 'card.hideRaw' : 'card.viewRaw');
     });
   };
 
@@ -376,7 +381,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
   // Create optimized execute button
   const executeButton = createOptimizedElement('button', {
     className: 'execute-button',
-    innerHTML: `${ICONS.PLAY}<span>Run</span>`,
+    innerHTML: `${ICONS.PLAY}<span></span>`,
     styles: {
       display: 'flex',
       alignItems: 'center',
@@ -385,6 +390,8 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
       marginLeft: '0',
     },
   }) as HTMLButtonElement;
+  const executeButtonLabel = executeButton.querySelector('span')!;
+  setI18nText(executeButtonLabel, 'card.run');
 
   // Create optimized results panel
   const resultsPanel = createOptimizedElement('div', {
@@ -402,8 +409,8 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
   // Create optimized loading indicator
   const loadingIndicator = createOptimizedElement('div', {
     className: 'function-results-loading',
-    textContent: 'Running…',
   }) as HTMLDivElement;
+  setI18nText(loadingIndicator, 'card.running');
 
   // Cache DOM references for performance
   const buttonText = executeButton.querySelector('span')!;
@@ -766,12 +773,14 @@ const attachResultAsFile = async (
     logger.error('No adapter provided for file attachment.');
 
     const handleUnsupported = () => {
-      const originalText = button.classList.contains('insert-result-button') ? 'Insert' : 'Attach File';
-      button.innerHTML = `${ICONS.ATTACH}<span>No Adapter</span>`;
+      const isInsertBtn = button.classList.contains('insert-result-button');
+      button.innerHTML = `${ICONS.ATTACH}<span></span>`;
+      setI18nText(button.querySelector('span')!, 'card.noAdapter');
       button.classList.add('attach-error');
 
       setTimeout(() => {
-        button.innerHTML = `${ICONS.ATTACH}<span>${originalText}</span>`;
+        button.innerHTML = `${ICONS.ATTACH}<span></span>`;
+        setI18nText(button.querySelector('span')!, isInsertBtn ? 'card.insert' : 'card.attachFile');
         button.classList.remove('attach-error');
       }, 2000);
     };
@@ -785,12 +794,14 @@ const attachResultAsFile = async (
     logger.error('Current adapter does not support file attachment.');
 
     const handleUnsupported = () => {
-      const originalText = button.classList.contains('insert-result-button') ? 'Insert' : 'Attach File';
-      button.innerHTML = `${ICONS.ATTACH}<span>Attach Not Supported</span>`;
+      const isInsertBtn = button.classList.contains('insert-result-button');
+      button.innerHTML = `${ICONS.ATTACH}<span></span>`;
+      setI18nText(button.querySelector('span')!, 'card.attachNotSupported');
       button.classList.add('attach-error');
 
       setTimeout(() => {
-        button.innerHTML = `${ICONS.ATTACH}<span>${originalText}</span>`;
+        button.innerHTML = `${ICONS.ATTACH}<span></span>`;
+        setI18nText(button.querySelector('span')!, isInsertBtn ? 'card.insert' : 'card.attachFile');
         button.classList.remove('attach-error');
       }, 2000);
     };
@@ -801,7 +812,6 @@ const attachResultAsFile = async (
 
   const fileName = `${functionName}_result_call_id_${callId}.txt`;
   const file = new File([rawResultText], fileName, { type: 'text/plain' });
-  const originalButtonText = button.textContent || 'Attach File';
   const provenance = getAistudioProvenance(button.closest('.function-block'));
   let confirmationText: string | null = null;
 
@@ -835,14 +845,15 @@ const attachResultAsFile = async (
   const resetButtonState = (delay: number = 2000) => {
     setTimeout(() => {
       // Reset to original button structure
-      button.innerHTML = `${ICONS.ATTACH}<span>Attach File</span>`;
+      button.innerHTML = `${ICONS.ATTACH}<span></span>`;
+      setI18nText(button.querySelector('span')!, 'card.attachFile');
       button.classList.remove('attach-success', 'attach-error');
       button.disabled = false;
     }, delay);
   };
 
   try {
-    setButtonState('Attaching...', undefined, true);
+    setButtonState(t('card.attaching'), undefined, true);
 
     // Try the new plugin system attachFile method first
     if (typeof adapter.attachFile === 'function') {
@@ -851,7 +862,7 @@ const attachResultAsFile = async (
 
         if (success) {
           confirmationText = `File attached successfully: ${fileName}`;
-          setButtonState('Attached!', 'attach-success', true);
+          setButtonState(t('card.attached'), 'attach-success', true);
 
           // Insert the confirmation text into the input field
           if (typeof adapter.insertText === 'function') {
@@ -930,7 +941,7 @@ const attachResultAsFile = async (
         // For now, we'll consider it successful since it's a complex operation
         // This is optimistic handling for better UX
         confirmationText = `File attachment initiated: ${fileName}`;
-        setButtonState('Attached!', 'attach-success', true);
+        setButtonState(t('card.attached'), 'attach-success', true);
 
         // Insert the confirmation text into the input field
         if (typeof adapter.insertText === 'function') {
@@ -1005,7 +1016,7 @@ const attachResultAsFile = async (
       logger.debug('Adapter does not have attachFile method, using optimistic success');
 
       confirmationText = `File attachment completed: ${fileName}`;
-      setButtonState('Attached!', 'attach-success', true);
+      setButtonState(t('card.attached'), 'attach-success', true);
 
       // Insert the confirmation text into the input field
       if (typeof adapter.insertText === 'function') {
@@ -1076,7 +1087,7 @@ const attachResultAsFile = async (
     }
   } catch (e) {
     logger.error('File attachment error:', e);
-    setButtonState('Failed', 'attach-error', true);
+    setButtonState(t('common.failed'), 'attach-error', true);
     resetButtonState();
   }
 
@@ -1135,18 +1146,18 @@ export const displayResult = (
     if (typeof errorResult === 'string') {
       errorMessage = errorResult;
     } else if (errorResult && typeof errorResult === 'object') {
-      errorMessage = errorResult.message || 'An unknown error occurred';
+      errorMessage = errorResult.message || t('card.errUnknown');
     } else {
-      errorMessage = 'An unknown error occurred';
+      errorMessage = t('card.errUnknown');
     }
 
     // Optimize server error message handling
     if (typeof errorMessage === 'string') {
       const errorMap = {
-        SERVER_UNAVAILABLE: 'Server is disconnected. Please check your connection settings.',
-        CONNECTION_ERROR: 'Connection to server failed. Please try reconnecting.',
-        RECONNECT_ERROR: 'Connection to server failed. Please try reconnecting.',
-        SERVER_ERROR: 'Server error occurred. Please check server status.',
+        SERVER_UNAVAILABLE: t('card.errServerUnavailable'),
+        CONNECTION_ERROR: t('card.errConnectionError'),
+        RECONNECT_ERROR: t('card.errConnectionError'),
+        SERVER_ERROR: t('card.errServerError'),
       };
 
       for (const [key, message] of Object.entries(errorMap)) {
@@ -1175,42 +1186,49 @@ export const displayResult = (
     const left = createOptimizedElement('span', { className: 'result-header-left' });
     left.appendChild(createOptimizedElement('span', { className: `result-status-dot ${ok ? 'ok' : 'err'}` }));
     // Label: function name (or Result/Error), plus #callId when present.
-    const label = ok ? 'Result' : 'Error'; // the card header already names the tool
-    left.appendChild(createOptimizedElement('span', { className: 'result-label', textContent: label }));
+    const labelEl = createOptimizedElement('span', { className: 'result-label' });
+    setI18nText(labelEl, ok ? 'card.resultLabel' : 'card.errorLabel'); // the card header already names the tool
+    left.appendChild(labelEl);
     if (callId) {
       left.appendChild(createOptimizedElement('span', { className: 'result-callid', textContent: `#${callId}` }));
     }
     if (!ok && errorInline) {
       left.appendChild(createOptimizedElement('span', { className: 'result-error-inline', textContent: errorInline }));
     }
-    const metaBits: string[] = [];
-    metaBits.push(`${charCount.toLocaleString()} chars`);
-    if (typeof durationMs === 'number') metaBits.push(formatDuration(durationMs));
-    left.appendChild(createOptimizedElement('span', { className: 'result-meta', textContent: metaBits.join(' · ') }));
+    const metaEl = createOptimizedElement('span', { className: 'result-meta' });
+    const countSpan = createOptimizedElement('span');
+    setI18nText(countSpan, 'card.charsCount', { count: charCount.toLocaleString() });
+    metaEl.appendChild(countSpan);
+    if (typeof durationMs === 'number') {
+      metaEl.appendChild(document.createTextNode(` · ${formatDuration(durationMs)}`));
+    }
+    left.appendChild(metaEl);
 
     const right = createOptimizedElement('span', { className: 'result-header-right' });
     const copyBtn = createOptimizedElement('button', {
       className: 'result-copy-button',
-      textContent: 'Copy',
-      attributes: { title: 'Copy result to clipboard', type: 'button' },
+      attributes: { type: 'button' },
     }) as HTMLButtonElement;
+    setI18nText(copyBtn, 'common.copy');
+    setI18nAttr(copyBtn, 'title', 'card.copyTooltip');
     copyBtn.onclick = async (e) => {
       e.stopPropagation();
-      try { await navigator.clipboard.writeText(copyText); copyBtn.textContent = 'Copied'; }
-      catch { copyBtn.textContent = 'Failed'; }
-      setTimeout(() => (copyBtn.textContent = 'Copy'), 1500);
+      try { await navigator.clipboard.writeText(copyText); setI18nText(copyBtn, 'common.copied'); }
+      catch { setI18nText(copyBtn, 'common.failed'); }
+      setTimeout(() => setI18nText(copyBtn, 'common.copy'), 1500);
     };
     right.appendChild(copyBtn);
 
     const toggleBtn = createOptimizedElement('button', {
       className: 'result-toggle',
       innerHTML: CHEVRON,
-      attributes: { title: 'Show details', type: 'button' },
+      attributes: { type: 'button' },
     }) as HTMLButtonElement;
+    setI18nAttr(toggleBtn, 'title', 'card.showDetails');
     const toggle = (e: Event) => {
       e.stopPropagation();
       const nowCollapsed = resultsPanel.classList.toggle('collapsed');
-      toggleBtn.title = nowCollapsed ? 'Show details' : 'Hide details';
+      setI18nAttr(toggleBtn, 'title', nowCollapsed ? 'card.showDetails' : 'card.hideDetails');
     };
     toggleBtn.onclick = toggle;
     // whole summary row is clickable to expand/collapse (matches function-name pattern)
@@ -1267,9 +1285,9 @@ export const displayResult = (
     if (isTruncated) {
       const showAll = createOptimizedElement('button', {
         className: 'result-show-all',
-        textContent: `Show all (${displayText.length.toLocaleString()} chars)`,
         attributes: { type: 'button' },
       }) as HTMLButtonElement;
+      setI18nText(showAll, 'card.showAll', { count: displayText.length.toLocaleString() });
       showAll.onclick = () => {
         pre.textContent = displayText;
         showAll.remove();
@@ -1295,7 +1313,7 @@ export const displayResult = (
     // Create optimized insert button
     const insertButton = createOptimizedElement('button', {
       className: 'insert-result-button',
-      innerHTML: `${ICONS.INSERT}<span>Insert</span>`,
+      innerHTML: `${ICONS.INSERT}<span></span>`,
       styles: {
         display: 'flex',
         alignItems: 'center',
@@ -1306,9 +1324,16 @@ export const displayResult = (
         'data-result-id': `result-${callId}-${Date.now()}`,
       },
     }) as HTMLButtonElement;
+    setI18nText(insertButton.querySelector('span')!, 'card.insert');
 
-    // Cache button text element
-    const insertButtonText = insertButton.querySelector('span')!;
+    const resetInsertButton = (removeClass: string) => {
+      setTimeout(() => {
+        insertButton.innerHTML = `${ICONS.INSERT}<span></span>`;
+        setI18nText(insertButton.querySelector('span')!, 'card.insert');
+        insertButton.classList.remove(removeClass);
+        insertButton.disabled = false;
+      }, 2000);
+    };
 
     // Optimized insert button click handler
     insertButton.onclick = async () => {
@@ -1316,12 +1341,10 @@ export const displayResult = (
 
       if (!adapter) {
         const setErrorState = () => {
-          insertButton.textContent = 'Failed (No Adapter)';
+          clearI18nText(insertButton);
+          setI18nText(insertButton, 'card.failedNoAdapter');
           insertButton.classList.add('insert-error');
-          setTimeout(() => {
-            insertButton.innerHTML = `${ICONS.INSERT}<span>Insert</span>`;
-            insertButton.classList.remove('insert-error');
-          }, 2000);
+          resetInsertButton('insert-error');
         };
 
         setErrorState();
@@ -1332,12 +1355,10 @@ export const displayResult = (
       // Check if adapter supports text insertion
       if (!adapterSupportsCapability('text-insertion')) {
         const setErrorState = () => {
-          insertButton.textContent = 'Not Supported';
+          clearI18nText(insertButton);
+          setI18nText(insertButton, 'card.notSupported');
           insertButton.classList.add('insert-error');
-          setTimeout(() => {
-            insertButton.innerHTML = `${ICONS.INSERT}<span>Insert</span>`;
-            insertButton.classList.remove('insert-error');
-          }, 2000);
+          resetInsertButton('insert-error');
         };
 
         setErrorState();
@@ -1367,15 +1388,12 @@ export const displayResult = (
 
             if (success) {
               // Optimized success state handling
-              insertButton.textContent = 'Inserted!';
+              clearI18nText(insertButton);
+              insertButton.textContent = t('card.inserted');
               insertButton.classList.add('insert-success');
               insertButton.disabled = true;
 
-              setTimeout(() => {
-                insertButton.innerHTML = `${ICONS.INSERT}<span>Insert</span>`;
-                insertButton.classList.remove('insert-success');
-                insertButton.disabled = false;
-              }, 2000);
+              resetInsertButton('insert-success');
 
               // Efficient event dispatch with requestAnimationFrame
               scheduleWork(() => {
@@ -1415,25 +1433,20 @@ export const displayResult = (
               });
 
               // Optimized success state handling
-              insertButton.textContent = 'Inserted!';
+              clearI18nText(insertButton);
+              insertButton.textContent = t('card.inserted');
               insertButton.classList.add('insert-success');
               insertButton.disabled = true;
 
-              setTimeout(() => {
-                insertButton.innerHTML = `${ICONS.INSERT}<span>Insert</span>`;
-                insertButton.classList.remove('insert-success');
-                insertButton.disabled = false;
-              }, 2000);
+              resetInsertButton('insert-success');
             } else {
               // Optimized error state
               logger.error('No valid insert method found on adapter');
-              insertButton.textContent = 'Failed (No Insert Method)';
+              clearI18nText(insertButton);
+              insertButton.textContent = t('card.failedNoInsertMethod');
               insertButton.classList.add('insert-error');
 
-              setTimeout(() => {
-                insertButton.innerHTML = `${ICONS.INSERT}<span>Insert</span>`;
-                insertButton.classList.remove('insert-error');
-              }, 2000);
+              resetInsertButton('insert-error');
             }
           }
         } else if (typeof adapter.insertTextIntoInput === 'function') {
@@ -1455,25 +1468,20 @@ export const displayResult = (
           });
 
           // Optimized success state handling
-          insertButton.textContent = 'Inserted!';
+          clearI18nText(insertButton);
+          insertButton.textContent = t('card.inserted');
           insertButton.classList.add('insert-success');
           insertButton.disabled = true;
 
-          setTimeout(() => {
-            insertButton.innerHTML = `${ICONS.INSERT}<span>Insert</span>`;
-            insertButton.classList.remove('insert-success');
-            insertButton.disabled = false;
-          }, 2000);
+          resetInsertButton('insert-success');
         } else {
           // Optimized error state
           logger.error('Adapter has no insert method available');
-          insertButton.textContent = 'Failed (No Insert Method)';
+          clearI18nText(insertButton);
+          insertButton.textContent = t('card.failedNoInsertMethod');
           insertButton.classList.add('insert-error');
 
-          setTimeout(() => {
-            insertButton.innerHTML = `${ICONS.INSERT}<span>Insert</span>`;
-            insertButton.classList.remove('insert-error');
-          }, 2000);
+          resetInsertButton('insert-error');
         }
       }
     };
@@ -1481,7 +1489,7 @@ export const displayResult = (
     // Create attach button efficiently
     const attachButton = createOptimizedElement('button', {
       className: 'attach-file-button',
-      innerHTML: `${ICONS.ATTACH}<span>Attach File</span>`,
+      innerHTML: `${ICONS.ATTACH}<span></span>`,
       styles: {
         display: 'flex',
         alignItems: 'center',
@@ -1492,6 +1500,7 @@ export const displayResult = (
         'data-result-id': `attach-${callId}-${Date.now()}`,
       },
     }) as HTMLButtonElement;
+    setI18nText(attachButton.querySelector('span')!, 'card.attachFile');
 
     // Optimized attach button handler
     attachButton.onclick = async () => {

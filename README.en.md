@@ -31,6 +31,11 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## Changelog
 
+### v0.1.6
+
+- **Added multi-language UI support, starting with Simplified Chinese and English.** Follows your browser language automatically by default, and can be switched live at any time from Sidebar **Settings** or the extension Options page with instant cross-tab sync; tool instructions sent to AI stay in English.
+- **Polished Chinese typography, card layout, and action tooltips.** Covers the sidebar, hover popover, tab picker, tool cards, input chips, and options/permission pages, adds explicit CJK font fallbacks for `<select>` controls, and refines the RTK card layout and instruction button tooltips.
+
 ### v0.1.5
 
 - **Added support for Google AI Studio Build / Apps (`/app/apps` and `/apps/<id>`).** Works with both the initial prompt box and the left-side assistant chat pane after an app is created, supporting **Insert / Remind** chip merging, `Ctrl+Enter` or Send button submission, and multi-turn automatic tool execution, insertion, and submission without touching the right-side code editor.

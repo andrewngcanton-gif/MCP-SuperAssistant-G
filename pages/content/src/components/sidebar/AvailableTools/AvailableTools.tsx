@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useState, useEffect, useMemo } from 'react';
+import { useI18n } from '@extension/shared';
 import type { Tool } from '@src/types/mcp';
 import { useAvailableTools, useToolExecution, useToolEnablement } from '../../../hooks';
 import { logMessage } from '@src/utils/helpers';
@@ -45,6 +46,7 @@ const loadExpandedGroups = (): Set<string> => {
 
 // Single tool row + expandable schema detail. Local to this file only.
 const ToolItem: React.FC<ToolItemProps> = ({ tool, isEnabled, expanded, onToggleExpand, onToggleEnabled }) => {
+  const { t } = useI18n();
   const displayName = tool.displayName || tool.name;
 
   return (
@@ -81,19 +83,19 @@ const ToolItem: React.FC<ToolItemProps> = ({ tool, isEnabled, expanded, onToggle
           {tool.description && (
             <p className="mb-2 text-xs text-slate-600 dark:text-slate-300">{tool.description}</p>
           )}
-          <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-400">Schema</div>
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-400">{t('tools.schemaLabel')}</div>
           <pre className="text-[11px] font-mono p-2 rounded-md max-h-48 overflow-y-auto whitespace-pre-wrap bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
             {(() => {
               try {
                 const schema = (tool as any).schema || (tool as any).input_schema;
-                if (!schema) return 'No schema available';
+                if (!schema) return t('tools.noSchema');
 
                 const schemaObject = typeof schema === 'string' ? JSON.parse(schema) : schema;
                 return JSON.stringify(schemaObject, null, 2);
               } catch (error) {
                 logger.error('Error processing tool schema:', error);
                 const schema = (tool as any).schema || (tool as any).input_schema;
-                return typeof schema === 'string' ? schema : 'Invalid schema format';
+                return typeof schema === 'string' ? schema : t('tools.invalidSchema');
               }
             })()}
           </pre>
@@ -104,6 +106,7 @@ const ToolItem: React.FC<ToolItemProps> = ({ tool, isEnabled, expanded, onToggle
 };
 
 const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRefresh, isRefreshing }) => {
+  const { t } = useI18n();
   // Use Zustand hooks for tool management
   const { tools: storeTools } = useAvailableTools();
   const { executions, isExecuting } = useToolExecution();
@@ -279,6 +282,13 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
     return enabledCount > 0 && enabledCount < tools.length;
   };
 
+  const getGroupDisplayName = (groupName: string): string => {
+    if (groupName === 'Discovery') return t('tools.groupDiscovery');
+    if (groupName === 'Browser') return t('tools.groupBrowser');
+    if (groupName === 'Server') return t('tools.groupServer');
+    return groupName;
+  };
+
   return (
     <div>
       {/* Sticky toolbar: search + refresh, then count + bulk actions */}
@@ -292,7 +302,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
             />
             <input
               type="text"
-              placeholder="Search tools..."
+              placeholder={t('tools.searchPlaceholder')}
               value={searchTerm}
               onChange={handleSearchChange}
               className="w-full h-8 pl-8 pr-2 text-sm rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none"
@@ -301,8 +311,8 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            aria-label="Refresh tools"
-            title="Refresh tools"
+            aria-label={t('tools.refreshTooltip')}
+            title={t('tools.refreshTooltip')}
             className="h-8 w-8 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition-colors duration-150 disabled:opacity-50">
             <Icon name="refresh" size="sm" className={cn(isRefreshing ? 'animate-spin' : '')} />
           </button>
@@ -310,20 +320,20 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
 
         <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 tabular-nums">
           <span>
-            {enabledCount} of {totalToolsCount} enabled
+            {t('tools.enabledSummary', { enabled: enabledCount, total: totalToolsCount })}
           </span>
           <div className="flex items-center gap-3">
             <button
               onClick={handleEnableAll}
               disabled={isRefreshing || isLoadingEnablement || totalToolsCount === 0}
               className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50 disabled:no-underline">
-              Enable all
+              {t('tools.enableAll')}
             </button>
             <button
               onClick={handleDisableAll}
               disabled={isRefreshing || isLoadingEnablement || totalToolsCount === 0}
               className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50 disabled:no-underline">
-              Disable all
+              {t('tools.disableAll')}
             </button>
           </div>
         </div>
@@ -332,7 +342,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
       {(isRefreshing || isLoadingEnablement) && (
         <div className="flex items-center justify-center gap-2 py-8 text-slate-500 dark:text-slate-400">
           <Icon name="refresh" className="w-5 h-5 animate-spin" />
-          <span className="text-sm">{isRefreshing ? 'Refreshing tools...' : 'Loading tool preferences...'}</span>
+          <span className="text-sm">{isRefreshing ? t('tools.refreshing') : t('tools.loadingPrefs')}</span>
         </div>
       )}
 
@@ -341,23 +351,23 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
           {searchTerm ? (
             <>
               <Icon name="search" className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-              <p className="text-sm">No tools match your search</p>
-              <p className="text-xs mt-1">Try a different search term</p>
+              <p className="text-sm">{t('tools.noMatch')}</p>
+              <p className="text-xs mt-1">{t('tools.tryDifferentSearch')}</p>
             </>
           ) : (
             <>
               <Icon name="box" className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-              <p className="text-sm">{!isLoaded ? 'Loading tools...' : 'No tools available'}</p>
+              <p className="text-sm">{!isLoaded ? t('tools.loadingTools') : t('tools.noneAvailable')}</p>
               <p className="text-xs mt-1">
                 {isLoaded ? (
                   <>
-                    Check your server connection or{' '}
+                    {t('tools.checkConnectionOr')}{' '}
                     <button onClick={handleRefresh} className="text-indigo-600 dark:text-indigo-400 hover:underline">
-                      refresh
+                      {t('tools.refreshAction')}
                     </button>
                   </>
                 ) : (
-                  'Please wait while we connect to the server'
+                  t('tools.waitConnecting')
                 )}
               </p>
             </>
@@ -394,7 +404,7 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
                     onClick={e => e.stopPropagation()}
                     className="h-4 w-4 rounded accent-indigo-600"
                   />
-                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{serverName}</span>
+                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{getGroupDisplayName(serverName)}</span>
                   <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
                     · {tools.filter(t => isToolEnabled(t.originalName || t.name)).length}/{tools.length}
                   </span>

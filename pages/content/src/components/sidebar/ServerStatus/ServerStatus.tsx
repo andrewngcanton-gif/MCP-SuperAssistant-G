@@ -2,6 +2,7 @@ import type { ConnectionType } from '../../../types/stores';
 import SetupHelp from './SetupHelp';
 import type React from 'react';
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n, type MessageKey, type TranslationParams } from '@extension/shared';
 import { useMcpCommunication } from '@src/hooks/useMcpCommunication';
 import { useConnectionStatus, useServerConfig, useAvailableTools } from '../../../hooks';
 import { logMessage } from '@src/utils/helpers';
@@ -14,11 +15,14 @@ import { createLogger } from '@extension/shared/lib/logger';
 
 const logger = createLogger('ServerStatus');
 
+type StatusMsg = { key: MessageKey; params?: TranslationParams } | { raw: string } | null;
+
 interface ServerStatusProps {
   status: string;
 }
 
 const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) => {
+  const { t } = useI18n();
   // Use Zustand hooks for connection status and server config
   const {
     status: connectionStatus,
@@ -37,7 +41,8 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
   const [lastReconnectTime, setLastReconnectTime] = useState<string>('');
   const [serverUri, setServerUri] = useState<string>(serverConfig.uri || '');
   const [connectionType, setConnectionType] = useState<ConnectionType>(serverConfig.connectionType || 'sse');
-  const [statusMessage, setStatusMessage] = useState<string>('');
+  const [statusMsg, setStatusMsg] = useState<StatusMsg>(null);
+  const statusMessage = statusMsg ? ('raw' in statusMsg ? statusMsg.raw : t(statusMsg.key, statusMsg.params)) : '';
   const [hasBackgroundError, setHasBackgroundError] = useState<boolean>(false);
   const [isEditingUri, setIsEditingUri] = useState<boolean>(false);
   const [isEditingConnectionType, setIsEditingConnectionType] = useState<boolean>(false);
@@ -165,20 +170,20 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     }
 
     if (hasBackgroundError) {
-      setStatusMessage('Extension background services unavailable. Try reloading the page.');
+      setStatusMsg({ key: 'server.msgBackgroundUnavailable' });
     } else {
       switch (status) {
         case 'connected':
-          setStatusMessage('MCP Server is connected and ready');
+          setStatusMsg({ key: 'server.msgConnectedReady' });
           break;
         case 'disconnected':
-          setStatusMessage('MCP Server is unavailable. Some features will be limited.');
+          setStatusMsg({ key: 'server.msgUnavailable' });
           break;
         case 'error':
-          setStatusMessage(connectionError || 'Error connecting to extension services. Try reloading the page.');
+          setStatusMsg(connectionError ? { raw: connectionError } : { key: 'server.msgServiceError' });
           break;
         default:
-          setStatusMessage('Checking MCP Server status...');
+          setStatusMsg({ key: 'server.msgCheckingStatus' });
       }
     }
   }, [status, connectionError, hasBackgroundError, isReconnecting, storeIsReconnecting, isConnected]);
@@ -209,7 +214,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     const unsubscribeBridgeInvalidated = eventBus.on('context:bridge-invalidated', (data) => {
       logMessage(`[ServerStatus] Context bridge invalidated: ${data.error}`);
       setHasBackgroundError(true);
-      setStatusMessage(`Extension context invalidated: ${data.error}`);
+      setStatusMsg({ key: 'server.msgContextInvalidated', params: { error: data.error } });
     });
     unsubscribeCallbacks.push(unsubscribeBridgeInvalidated);
 
@@ -245,7 +250,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
       if (!methodsAvailable && !hasBackgroundError) {
         setHasBackgroundError(true);
-        setStatusMessage('Extension background services unavailable. Try reloading the page.');
+        setStatusMsg({ key: 'server.msgBackgroundUnavailable' });
       } else if (methodsAvailable && hasBackgroundError) {
         // Background methods have become available again
         setHasBackgroundError(false);
@@ -311,7 +316,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     try {
       logMessage('[ServerStatus] Reconnect button clicked');
       setIsReconnecting(true);
-      setStatusMessage('Attempting to reconnect to MCP server...');
+      setStatusMsg({ key: 'server.msgReconnecting' });
 
       // Check if we can connect to the background script first
       if (hasBackgroundError) {
@@ -347,7 +352,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
       // Set appropriate status message based on reconnection result
       if (success) {
-        setStatusMessage('Successfully reconnected to MCP server');
+        setStatusMsg({ key: 'server.msgReconnected' });
         logMessage('[ServerStatus] Reconnection successful, fetching fresh tool list');
         try {
           const tools = await refreshTools(true);
@@ -358,7 +363,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
           );
         }
       } else {
-        setStatusMessage('Failed to reconnect to MCP server. Some features will be limited.');
+        setStatusMsg({ key: 'server.msgReconnectFailed' });
       }
     } catch (error) {
       // Ensure minimum display time even for errors
@@ -377,21 +382,19 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
       // Display the enhanced error message in the status
       if (errorMessage.includes('404') || errorMessage.includes('not found')) {
-        setStatusMessage(
-          'Server URL not found (404). Please verify your MCP server URL and ensure the server is running.',
-        );
+        setStatusMsg({ key: 'server.msgError404' });
       } else if (errorMessage.includes('403')) {
-        setStatusMessage('Access forbidden (403). Please check server permissions and authentication settings.');
+        setStatusMsg({ key: 'server.msgError403' });
       } else if (errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('503')) {
-        setStatusMessage('Server error detected. The MCP server may be experiencing issues.');
+        setStatusMsg({ key: 'server.msgError5xx' });
       } else if (errorMessage.includes('Connection refused') || errorMessage.includes('ECONNREFUSED')) {
-        setStatusMessage('Connection refused. Please verify the MCP server is running at the configured URL.');
+        setStatusMsg({ key: 'server.msgConnRefused' });
       } else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
-        setStatusMessage('Connection timeout. The server may be slow to respond or unreachable.');
+        setStatusMsg({ key: 'server.msgTimeout' });
       } else if (errorMessage.includes('ENOTFOUND')) {
-        setStatusMessage('Server not found. Please check the server URL and your network connection.');
+        setStatusMsg({ key: 'server.msgHostNotFound' });
       } else {
-        setStatusMessage(`Connection failed: ${errorMessage}`);
+        setStatusMsg({ key: 'server.msgConnFailed', params: { error: errorMessage } });
       }
     } finally {
       setIsReconnecting(false);
@@ -453,8 +456,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     setLastReconnectTime(new Date().toLocaleTimeString());
 
     // Use a single stable message throughout the process to prevent flickers
-    const stableMessage = 'Saving configuration and connecting...';
-    setStatusMessage(stableMessage);
+    setStatusMsg({ key: 'server.msgSavingConfig' });
 
     // Clear any existing error
     setLastErrorMessage('');
@@ -492,7 +494,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
       // Single final UI update to prevent flickers
       if (success) {
-        setStatusMessage('Successfully connected to MCP server');
+        setStatusMsg({ key: 'server.msgConnectedNew' });
 
         // Refresh tools silently without UI updates
         try {
@@ -504,7 +506,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
           );
         }
       } else {
-        setStatusMessage('Failed to connect to new MCP server');
+        setStatusMsg({ key: 'server.msgConnectNewFailed' });
       }
 
       // Close settings on success
@@ -520,7 +522,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
       const errorMessage = error instanceof Error ? error.message : String(error);
       setLastErrorMessage(errorMessage);
-      setStatusMessage(`Configuration failed: ${errorMessage}`);
+      setStatusMsg({ key: 'server.msgConfigFailed', params: { error: errorMessage } });
       logMessage(`[ServerStatus] Save config error: ${errorMessage}`);
       // Keep settings open on error
     } finally {
@@ -548,35 +550,35 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
           color: baseColors.emerald.text,
           bgColor: cn(baseColors.emerald.bg, baseColors.emerald.darkBg),
           icon: <Icon name="check" className={baseColors.emerald.text} />,
-          label: 'Connected',
+          label: t('server.connected'),
         };
       case 'reconnecting':
         return {
           color: baseColors.amber.text,
           bgColor: cn(baseColors.amber.bg, baseColors.amber.darkBg),
           icon: <Icon name="refresh" className={cn(baseColors.amber.text, 'animate-spin')} />,
-          label: 'Reconnecting',
+          label: t('server.reconnecting'),
         };
       case 'disconnected':
         return {
           color: baseColors.rose.text,
           bgColor: cn(baseColors.rose.bg, baseColors.rose.darkBg),
           icon: <Icon name="x" className={baseColors.rose.text} />,
-          label: 'Disconnected',
+          label: t('server.disconnected'),
         };
       case 'error':
         return {
           color: baseColors.rose.text,
           bgColor: cn(baseColors.rose.bg, baseColors.rose.darkBg),
           icon: <Icon name="info" className={baseColors.rose.text} />,
-          label: 'Error',
+          label: t('server.error'),
         };
       default: // Unknown status
         return {
           color: baseColors.slate.text,
           bgColor: cn(baseColors.slate.bg, baseColors.slate.darkBg),
           icon: <Icon name="info" className={baseColors.slate.text} />,
-          label: 'Unknown',
+          label: t('server.unknown'),
         };
     }
   };
@@ -599,14 +601,14 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
           : 'bg-slate-400';
   const statusLabel =
     displayStatus === 'connected'
-      ? 'Connected'
+      ? t('server.connected')
       : displayStatus === 'reconnecting'
-        ? 'Reconnecting…'
+        ? t('server.reconnectingEllipsis')
         : displayStatus === 'disconnected'
-          ? 'Disconnected'
+          ? t('server.disconnected')
           : displayStatus === 'error'
-            ? 'Error'
-            : 'Unknown';
+            ? t('server.error')
+            : t('server.unknown');
 
   const iconButtonClass =
     'h-7 w-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition-colors duration-150 disabled:opacity-50';
@@ -618,7 +620,9 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
           <span className={cn('w-2 h-2 rounded-full flex-shrink-0', statusDotColor, isReconnecting && 'animate-pulse')} />
           <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{statusLabel}</span>
           {status === 'connected' && (
-            <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">· {availableTools.length} tools</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+              {t('server.toolsCount', { count: availableTools.length })}
+            </span>
           )}
         </div>
 
@@ -627,8 +631,8 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
             onClick={handleReconnect}
             disabled={isReconnecting}
             className={iconButtonClass}
-            aria-label="Reconnect to server"
-            title="Reconnect to server">
+            aria-label={t('server.reconnectTooltip')}
+            title={t('server.reconnectTooltip')}>
             <Icon name="refresh" size="sm" className={cn(isReconnecting ? 'animate-spin' : '')} />
           </button>
 
@@ -636,8 +640,8 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
             onClick={handleSettings}
             disabled={settingsAnimating}
             className={iconButtonClass}
-            aria-label="Server settings"
-            title="Server settings">
+            aria-label={t('server.settingsTooltip')}
+            title={t('server.settingsTooltip')}>
             <Icon name="settings" size="sm" />
           </button>
 
@@ -645,8 +649,8 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
             onClick={handleDetails}
             disabled={detailsAnimating}
             className={iconButtonClass}
-            aria-label="Show details"
-            title="Show details">
+            aria-label={t('server.detailsTooltip')}
+            title={t('server.detailsTooltip')}>
             <Icon name="info" size="sm" />
           </button>
         </div>
@@ -673,7 +677,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
         <div className="mx-3 mb-2 px-3 py-2 rounded-md bg-amber-50 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-800/30">
           <div className="flex items-center gap-2">
             <div className="animate-spin w-3 h-3 border border-amber-500 border-t-transparent rounded-full"></div>
-            <span className="text-xs text-amber-700 dark:text-amber-300">Connecting to extension services...</span>
+            <span className="text-xs text-amber-700 dark:text-amber-300">{t('server.msgCheckingStatus')}</span>
           </div>
         </div>
       )}
@@ -683,11 +687,11 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
         <div className="mx-3 mb-3 animate-in slide-in-from-top-2 duration-200">
           <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
             <CardContent className="p-3 text-xs text-slate-700 dark:text-slate-300">
-              <div className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">Server Configuration</div>
+              <div className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">{t('server.configTitle')}</div>
 
               <div className="mb-4">
                 <label htmlFor="connection-type" className="block mb-2 text-slate-600 dark:text-slate-400 font-medium">
-                  Connection Type
+                  {t('server.connectionType')}
                 </label>
                 <select
                   id="connection-type"
@@ -697,22 +701,22 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   onBlur={handleConnectionTypeBlur}
                   className="w-full h-8 px-2 text-sm border border-slate-300 rounded-md bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                 >
-                  <option value="sse">Server-Sent Events (SSE)</option>
-                  <option value="websocket">WebSocket</option>
-                  <option value="streamable-http">Streamable HTTP</option>
+                  <option value="sse">{t('server.sseOption')}</option>
+                  <option value="websocket">{t('server.websocketOption')}</option>
+                  <option value="streamable-http">{t('server.streamableHttpOption')}</option>
                 </select>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {connectionType === 'sse' 
-                    ? 'HTTP-based streaming connection (traditional)' 
+                  {connectionType === 'sse'
+                    ? t('server.sseHint')
                     : connectionType === 'websocket'
-                      ? 'Full-duplex WebSocket connection (faster, more features)'
-                      : 'Advanced HTTP streaming (modern MCP protocol)'}
+                      ? t('server.websocketHint')
+                      : t('server.streamableHttpHint')}
                 </p>
               </div>
 
               <div className="mb-4">
                 <label htmlFor="server-uri" className="block mb-2 text-slate-600 dark:text-slate-400 font-medium">
-                  Server URI
+                  {t('server.serverUri')}
                 </label>
                 <input
                   id="server-uri"
@@ -729,26 +733,26 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   className="w-full h-8 px-2 text-sm border border-slate-300 rounded-md bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                 />
                 <details className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  <summary className="text-xs font-medium text-slate-500 dark:text-slate-400 cursor-pointer">Setup help</summary>
+                  <summary className="text-xs font-medium text-slate-500 dark:text-slate-400 cursor-pointer">{t('server.setupHelpSummary')}</summary>
                   <div className="mt-2 mb-2">
-                    <strong>To start MCP SuperAssistant Proxy:</strong>
+                    <strong>{t('server.proxyStartIntro')}</strong>
                   </div>
                   <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded-md font-mono text-[11px] border border-slate-200 dark:border-slate-700 break-all">
                     npx @srbhptl39/mcp-superassistant-proxy@latest --config ./config.json --outputTransport {connectionType === 'sse' ? 'sse' : connectionType === 'websocket' ? 'ws' : 'streamableHttp'}
                   </div>
                   <div className="mt-2 text-xs">
                     <div className="mb-1">
-                      Available transports: <code>streamableHttp</code>, <code>sse</code>, <code>ws</code>
+                      {t('server.availableTransports')} <code>streamableHttp</code>, <code>sse</code>, <code>ws</code>
                     </div>
                     <div className="mt-3 p-2 bg-slate-50 dark:bg-slate-800/50 rounded-md border border-slate-200 dark:border-slate-700">
-                      <div className="font-medium text-slate-700 dark:text-slate-200 mb-1">Public Endpoints Supported:</div>
+                      <div className="font-medium text-slate-700 dark:text-slate-200 mb-1">{t('server.publicEndpointsTitle')}</div>
                       <div className="text-slate-600 dark:text-slate-300 space-y-1">
-                        <div>• <strong>Zapier:</strong> Public MCP endpoints with CORS enabled</div>
-                        <div>• <strong>Composio:</strong> SSE and Streamable HTTP endpoints</div>
-                        <div>• <strong>Custom servers:</strong> Any MCP server with CORS headers</div>
+                        <div>• {t('server.zapierEndpoint')}</div>
+                        <div>• {t('server.composioEndpoint')}</div>
+                        <div>• {t('server.customServersEndpoint')}</div>
                       </div>
                       <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                        <strong>Note:</strong> WebSocket connections require local servers or proxy due to browser security restrictions.
+                        <strong>{t('server.websocketNotePrefix')}</strong> {t('server.websocketNote')}
                       </div>
                     </div>
                   </div>
@@ -771,7 +775,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   variant="outline"
                   size="sm"
                   className="h-7 px-2.5 text-xs font-medium border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button
                   onClick={handleSaveServerConfig}
@@ -782,10 +786,10 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   {isReconnecting ? (
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Connecting...
+                      {t('server.connecting')}
                     </div>
                   ) : (
-                    'Save & Reconnect'
+                    t('server.saveAndReconnect')
                   )}
                 </Button>
               </div>
@@ -794,7 +798,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                 <div className="mt-3 p-3 bg-rose-50 dark:bg-rose-900/20 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200">
                   <div className="flex items-center gap-2">
                     <Icon name="alert-triangle" size="sm" className="text-rose-600 dark:text-rose-400" />
-                    <p className="font-medium">Extension background services unavailable. Try reloading the page.</p>
+                    <p className="font-medium">{t('server.backgroundUnavailableBanner')}</p>
                   </div>
                 </div>
               )}
@@ -808,11 +812,11 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
         <div className="mx-3 mb-3 animate-in slide-in-from-top-2 duration-200">
           <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
             <CardContent className="p-3 text-xs text-slate-700 dark:text-slate-300">
-              <div className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">Connection Details</div>
+              <div className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">{t('server.detailsTitle')}</div>
 
               <div className="space-y-1">
                 <div className="flex justify-between items-center py-1">
-                  <span className="font-medium text-slate-700 dark:text-slate-200">Status:</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{t('server.statusLabel')}</span>
                   <span
                     className={cn(
                       'text-[11px] px-1.5 py-0.5 rounded font-medium',
@@ -825,27 +829,27 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                 </div>
 
                 <div className="flex justify-between items-start py-1">
-                  <span className="font-medium text-slate-700 dark:text-slate-200">Server URI:</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{t('server.serverUriLabel')}</span>
                   <span className="text-right text-slate-600 dark:text-slate-300 max-w-[200px] break-all">
-                    {serverUri || 'Not configured'}
+                    {serverUri || t('server.notConfigured')}
                   </span>
                 </div>
 
                 <div className="flex justify-between items-center py-1">
-                  <span className="font-medium text-slate-700 dark:text-slate-200">Connection Type:</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{t('server.connectionTypeLabel')}</span>
                   <span className="text-[11px] px-1.5 py-0.5 rounded font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                     {connectionType === 'websocket' ? 'WebSocket' : connectionType === 'streamable-http' ? 'Streamable HTTP' : 'SSE'}
                   </span>
                 </div>
 
                 <div className="flex justify-between items-center py-1">
-                  <span className="font-medium text-slate-700 dark:text-slate-200">Last updated:</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-200">{t('server.lastUpdated')}</span>
                   <span className="text-slate-600 dark:text-slate-300">{new Date().toLocaleTimeString()}</span>
                 </div>
 
                 {lastReconnectTime && (
                   <div className="flex justify-between items-center py-1">
-                    <span className="font-medium text-slate-700 dark:text-slate-200">Last reconnect:</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">{t('server.lastReconnect')}</span>
                     <span className="text-slate-600 dark:text-slate-300">{lastReconnectTime}</span>
                   </div>
                 )}
@@ -856,17 +860,17 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   <div className="flex items-start gap-2">
                     <Icon name="info" size="sm" className="text-amber-600 dark:text-amber-400 mt-0.5" />
                     <div>
-                      <p className="font-medium mb-2">Troubleshooting tips:</p>
+                      <p className="font-medium mb-2">{t('server.troubleshootingTitle')}</p>
                       <ul className="list-disc ml-4 space-y-1 text-xs">
-                        <li>Check if the MCP server is running at the configured URI</li>
-                        <li>Verify network connectivity to the server</li>
-                        <li>Restart the MCP server if needed</li>
-                        <li>Use the Reconnect button to try again</li>
+                        <li>{t('server.tipCheckRunning')}</li>
+                        <li>{t('server.tipVerifyNetwork')}</li>
+                        <li>{t('server.tipRestartServer')}</li>
+                        <li>{t('server.tipUseReconnect')}</li>
                       </ul>
                       {/* Show detailed error in troubleshooting section - prefer background error */}
                       {(backgroundConnectionError || lastErrorMessage) && (
                         <div className="mt-3 p-2 bg-amber-100 dark:bg-amber-800/50 rounded border border-amber-200 dark:border-amber-700">
-                          <p className="font-medium text-xs mb-1">Last Error:</p>
+                          <p className="font-medium text-xs mb-1">{t('server.lastError')}</p>
                           <p className="text-xs break-words">{backgroundConnectionError || lastErrorMessage}</p>
                         </div>
                       )}
@@ -880,11 +884,11 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   <div className="flex items-start gap-2">
                     <Icon name="alert-triangle" size="sm" className="text-rose-600 dark:text-rose-400 mt-0.5" />
                     <div>
-                      <p className="font-medium mb-2">Extension Communication Issue:</p>
+                      <p className="font-medium mb-2">{t('server.commIssueTitle')}</p>
                       <ul className="list-disc ml-4 space-y-1 text-xs">
-                        <li>Try reloading the current page</li>
-                        <li>If the issue persists, restart your browser</li>
-                        <li>You may need to reinstall the extension if problems continue</li>
+                        <li>{t('server.tipReloadPage')}</li>
+                        <li>{t('server.tipRestartBrowser')}</li>
+                        <li>{t('server.tipReinstall')}</li>
                       </ul>
                     </div>
                   </div>

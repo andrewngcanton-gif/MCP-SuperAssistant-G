@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useI18n } from '@extension/shared';
 import { telemetry } from '../../../utils/telemetry';
 
 const TRANSPORT_FLAG: Record<string, string> = { sse: 'sse', 'streamable-http': 'streamableHttp', websocket: 'ws' };
@@ -27,6 +28,7 @@ export function proxyCommand(connectionType: string, serverUri: string): string 
 
 const Step = ({ n, title, code, onCopy }: { n: number; title: string; code?: string; onCopy?: () => void }) => {
   const [copied, setCopied] = useState(false);
+  const { t } = useI18n();
   const copy = () => {
     if (!code) return;
     void navigator.clipboard.writeText(code).then(() => {
@@ -46,7 +48,7 @@ const Step = ({ n, title, code, onCopy }: { n: number; title: string; code?: str
             type="button"
             onClick={copy}
             className="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
-            {copied ? 'Copied' : 'Copy'}
+            {copied ? t('common.copied') : t('common.copy')}
           </button>
         )}
       </div>
@@ -62,6 +64,7 @@ const Step = ({ n, title, code, onCopy }: { n: number; title: string; code?: str
 /** Shown while no MCP proxy is reachable: the three steps to start one, with copy buttons. */
 const SetupHelp = ({ connectionType, serverUri }: { connectionType: string; serverUri: string }) => {
   const [open, setOpen] = useState(true);
+  const { t } = useI18n();
   const copied = () => telemetry('setup_copy');
   return (
     <div className="mx-3 mb-2 rounded-md border border-slate-200 p-2.5 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-300">
@@ -69,31 +72,32 @@ const SetupHelp = ({ connectionType, serverUri }: { connectionType: string; serv
         type="button"
         onClick={() => setOpen(o => !o)}
         className="flex w-full items-center justify-between font-medium text-slate-800 dark:text-slate-100">
-        <span>Set up your tools in 2 minutes</span>
+        <span>{t('setup.title')}</span>
         <span className="text-slate-400">{open ? '–' : '+'}</span>
       </button>
       {open && (
         <ol className="mt-2 space-y-2">
           <li className="text-slate-500 dark:text-slate-400">
-            MCP SuperAssistant needs a small local proxy that runs your MCP servers. You need Node.js installed.
+            {t('setup.intro')}
           </li>
-          <Step n={1} title="Save your MCP servers as config.json (example):" code={CONFIG} onCopy={copied} />
+          <Step n={1} title={t('setup.step1')} code={CONFIG} onCopy={copied} />
           <Step
             n={2}
-            title="In a terminal, in that folder, run:"
+            title={t('setup.step2')}
             code={proxyCommand(connectionType, serverUri)}
             onCopy={copied}
           />
-          <Step n={3} title="Leave it running, then click Reconnect above." />
+          <Step n={3} title={t('setup.step3')} />
           <li>
             <a
               href="https://github.com/srbhptl39/MCP-SuperAssistant#readme"
               target="_blank"
               rel="noreferrer"
               className="text-indigo-600 hover:underline dark:text-indigo-400">
-              Full setup guide
+              {t('setup.fullGuide')}
             </a>
-            {' · '}You can reuse an existing Claude Desktop or Cursor config file.
+            {' · '}
+            {t('setup.reuseConfigHint')}
           </li>
         </ol>
       )}

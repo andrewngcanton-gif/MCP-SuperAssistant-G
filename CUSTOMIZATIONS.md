@@ -44,6 +44,15 @@ After changing the toggle, re-run the generator and restart the proxy; the runni
 
 Detailed implementation-level notes for each release and fix. User-facing summaries live in [README.md](README.md) and [README.en.md](README.en.md).
 
+### v0.1.6
+
+- **Shared, zero-Suspense UI i18n engine (`packages/shared/lib/i18n/*`, `packages/shared/index.mts`, `packages/shared/tests/i18n.test.ts`).**
+  - Added a standalone, compile-time-checked i18n layer (`types.ts`, `locales/en.ts`, `locales/zh-CN.ts`, `core.ts`, `react.ts`, `dom.ts`) backed by `chrome.storage.local` (`mcp-ui-language`) with guarded `chrome.storage.onChanged` cross-context sync, BCP-47 priority-order `'auto'` locale resolution, React 19 `useSyncExternalStore` hook (`useI18n()`), and live DOM attribute sync (`setI18nText`, `setI18nAttr`, `bindI18nDomSync`) for native DOM tool cards.
+  - Added unit tests in `packages/shared/tests/i18n.test.ts` (registered in `package.json` `test:unit`) verifying `en`/`zh-CN` key parity, placeholder parity, CJK-ASCII spacing conventions, locale resolution, and snapshot stability.
+- **Full UI localization and CJK layout polish (`Settings.tsx`, `Sidebar.tsx`, `ServerStatus.tsx`, `SetupHelp.tsx`, `AvailableTools.tsx`, `InstructionManager.tsx`, `ConsentBanner.tsx`, `mcpPopover.tsx`, `TabPicker.tsx`, `TabPickerPanel.tsx`, `components.ts`, `functionBlock.ts`, `functionResult.ts`, `functionHistory.ts`, `input-chips.ts`, `sidebar.css`, `pages/options/src/*`).**
+  - Wired all sidebar, popover, tab-picker, native tool card, input chip, and options/consent/grant UI strings while keeping LLM instruction generators, chat-injected prompts, host-site button matchers, and DOM test selectors completely untouched.
+  - Added CJK sans-serif fallbacks and `select`/`option`/`label`/`textarea` coverage in `sidebar.css`, stacked the RTK opt-in card header/description layout in `InstructionManager.tsx`, and synchronized tooltips on the expanded popover's Insert/Attach buttons.
+
 ### v0.1.5
 
 - **Google AI Studio Build / Apps adapter and isolated turn gate (`aistudio-apps.ts`, `aistudioAppsTurnGate.ts`, `aistudio.adapter.ts`, `aistudioTurnGate.ts`, `plugin-types.ts`, `input-chips.ts`, `index.ts`, `functionBlock.ts`, `components.ts`).**

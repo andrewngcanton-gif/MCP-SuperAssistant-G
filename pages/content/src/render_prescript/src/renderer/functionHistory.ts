@@ -19,6 +19,7 @@ import {
   registerAistudioInvocation,
 } from '../provenance/aistudioTurnGate';
 import { createLogger } from '@extension/shared/lib/logger';
+import { setI18nAttr, setI18nText } from '@extension/shared';
 
 // Add type declaration for global mcpClient access
 
@@ -95,7 +96,7 @@ export const updateHistoryPanel = (
   // Create header
   const header = document.createElement('div');
   header.className = 'function-history-header';
-  header.textContent = 'Execution History';
+  setI18nText(header, 'card.execHistoryTitle');
   historyPanel.appendChild(header);
 
   // Create execution info
@@ -105,18 +106,18 @@ export const updateHistoryPanel = (
   // Format the execution time
   const executionTime = formatExecutionTime(executionData.executedAt);
 
-  executionInfo.textContent = `Last run ${executionTime}`;
+  setI18nText(executionInfo, 'card.lastRun', { time: executionTime });
   historyPanel.appendChild(executionInfo);
 
   // Create re-execute button
   const reExecuteBtn = document.createElement('button');
   reExecuteBtn.className = 'function-reexecute-button';
-  reExecuteBtn.textContent = 'Run again';
+  setI18nText(reExecuteBtn, 'card.runAgain');
 
   // Params were too large to persist — re-execute can't reconstruct the args.
   if (executionData.paramsOmitted) {
     reExecuteBtn.disabled = true;
-    reExecuteBtn.title = 'Parameters too large to store — re-run from the function block above';
+    setI18nAttr(reExecuteBtn, 'title', 'card.paramsTooLarge');
   }
 
   // Handle re-execution with async mcpClient
@@ -156,7 +157,7 @@ export const updateHistoryPanel = (
     // Create loading indicator
     const loadingIndicator = document.createElement('div');
     loadingIndicator.className = 'function-results-loading';
-    loadingIndicator.textContent = 'Executing...';
+    setI18nText(loadingIndicator, 'card.executing');
     resultsPanel.appendChild(loadingIndicator);
 
     fnBlock?.classList.remove('exec-success', 'exec-error');

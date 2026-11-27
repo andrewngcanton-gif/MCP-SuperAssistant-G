@@ -15,6 +15,7 @@ import {
   analyzeJSONSegment,
 } from '../parser/jsonFunctionParser';
 import { createLogger } from '@extension/shared/lib/logger';
+import { setI18nAttr } from '@extension/shared';
 import { telemetry } from '../../../utils/telemetry';
 import {
   claimAistudioAutomaticInvocation,
@@ -786,7 +787,7 @@ const AutoExpandUtils = {
         if (expandIcon) {
           expandIcon.setAttribute('d', 'M16 14l-4-4-4 4');
         }
-        expandButton.title = 'Collapse function details';
+        setI18nAttr(expandButton, 'title', 'card.collapseFnDetails');
       });
 
       // Release the height clamp after the animation so content that streams in
@@ -842,7 +843,7 @@ const AutoExpandUtils = {
         if (expandIcon) {
           expandIcon.setAttribute('d', 'M8 10l4 4 4-4');
         }
-        expandButton.title = 'Expand function details';
+        setI18nAttr(expandButton, 'title', 'card.expandFnDetails');
       });
       
       // Hide after animation completes
@@ -936,7 +937,7 @@ const BlockElementUtils = {
         <path d="M8 10l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     `;
-    expandButton.title = 'Expand function details';
+    setI18nAttr(expandButton, 'title', 'card.expandFnDetails');
     return expandButton;
   },
 
@@ -984,7 +985,7 @@ const BlockElementUtils = {
           if (expandIcon) {
             expandIcon.setAttribute('d', 'M8 10l4 4 4-4');
           }
-          expandButton.title = 'Expand function details';
+          setI18nAttr(expandButton, 'title', 'card.expandFnDetails');
         });
 
         // Hide after animation completes
@@ -1020,7 +1021,7 @@ const BlockElementUtils = {
           if (expandIcon) {
             expandIcon.setAttribute('d', 'M16 14l-4-4-4 4');
           }
-          expandButton.title = 'Collapse function details';
+          setI18nAttr(expandButton, 'title', 'card.collapseFnDetails');
         });
 
         // Release the height clamp after the animation so later content isn't clipped.

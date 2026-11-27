@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useI18n } from '@extension/shared';
 import { requestFullAccess, useFullAccess } from '@src/access';
 import { primaryButtonClass, buttonClass } from '@src/ui';
 
@@ -7,13 +8,14 @@ import { primaryButtonClass, buttonClass } from '@src/ui';
  * current tab (options/index.html#grant). One click on Allow brings up Chrome's own dialog.
  */
 const Grant = () => {
+  const { t } = useI18n();
   const granted = useFullAccess();
   const [declined, setDeclined] = useState(false);
 
   useEffect(() => {
     if (granted) {
-      const t = setTimeout(() => window.close(), 900);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => window.close(), 900);
+      return () => clearTimeout(timer);
     }
     return undefined;
   }, [granted]);
@@ -28,26 +30,25 @@ const Grant = () => {
       <div className="flex w-full max-w-sm flex-col gap-4">
         <div className="flex items-center gap-3">
           <img src="/icon.svg" alt="" className="h-8 w-8" />
-          <h1 className="text-base font-semibold">Allow browser access</h1>
+          <h1 className="text-base font-semibold">{t('grant.title')}</h1>
         </div>
 
         {granted ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Access allowed. You can close this window.</p>
+          <p className="text-sm text-green-700 dark:text-green-400">{t('grant.allowed')}</p>
         ) : (
           <>
             <p className="text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-              MCP SuperAssistant needs permission to read pages so it can attach your open tabs to a chat. Your browser
-              will ask you to confirm. You can remove access any time in Settings.
+              {t('grant.body')}
             </p>
             {declined ? (
-              <p className="text-xs text-amber-600 dark:text-amber-500">Access was not allowed. Try again or close.</p>
+              <p className="text-xs text-amber-600 dark:text-amber-500">{t('grant.declined')}</p>
             ) : null}
             <div className="flex justify-end gap-2">
               <button type="button" className={buttonClass} onClick={() => window.close()}>
-                Not now
+                {t('common.notNow')}
               </button>
               <button type="button" className={primaryButtonClass} disabled={granted === null} onClick={allow}>
-                Allow
+                {t('common.allow')}
               </button>
             </div>
           </>

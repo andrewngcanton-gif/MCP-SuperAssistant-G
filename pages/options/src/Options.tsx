@@ -1,5 +1,5 @@
 import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { useStorage } from '@extension/shared';
+import { useI18n, useStorage, type LanguagePreference } from '@extension/shared';
 import {
   AI_PLATFORMS,
   BROWSER_BRIDGE_DEFAULTS,
@@ -53,6 +53,7 @@ const StatusDot = ({ state }: { state: boolean | null }) => (
 );
 
 const OptionsInner = () => {
+  const { t, preference, setLanguage } = useI18n();
   const settings = useStorage(browserBridgeStorage);
   const telemetrySettings = useStorage(telemetryStorage);
   const { saved, flash } = useSavedFlash();
@@ -75,7 +76,7 @@ const OptionsInner = () => {
   const allowAccess = async () => {
     setAccessNote('');
     const granted = await requestFullAccess();
-    if (!granted) setAccessNote('Access was not allowed. Click Allow access to try again.');
+    if (!granted) setAccessNote(t('options.accessDeniedNote'));
     return granted;
   };
 
@@ -147,21 +148,32 @@ const OptionsInner = () => {
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <div className="mx-auto flex max-w-[680px] flex-col gap-6 px-5 py-10">
-        <header className="flex items-center justify-between">
+        <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <img src="/icon.svg" alt="" className="h-8 w-8" />
             <div>
               <h1 className="text-lg font-semibold">MCP SuperAssistant</h1>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">Settings · v{version}</p>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">{t('options.subtitle', { version })}</p>
             </div>
           </div>
-          <SavedTag show={saved} />
+          <div className="flex items-center gap-3">
+            <SavedTag show={saved} />
+            <select
+              aria-label={t('language.label')}
+              value={preference}
+              onChange={e => setLanguage(e.target.value as LanguagePreference)}
+              className="rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 font-sans text-sm leading-normal text-neutral-800 outline-none transition focus:border-neutral-500 focus:ring-2 focus:ring-neutral-200 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-neutral-500 dark:focus:ring-neutral-700">
+              <option value="auto">{t('language.auto')}</option>
+              <option value="zh-CN">{t('language.zhCN')}</option>
+              <option value="en">{t('language.en')}</option>
+            </select>
+          </div>
         </header>
 
         {/* 1. Browser access: the Chrome permission first, then what the AI may do with it */}
         <Card
-          title="Browser access"
-          description="Lets SuperAssistant read your open tabs when you attach them or allow the AI to.">
+          title={t('options.browserAccessTitle')}
+          description={t('options.browserAccessDesc')}>
           <div
             className={
               'flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 ' +
@@ -173,42 +185,44 @@ const OptionsInner = () => {
               <StatusDot state={hasAccess} />
               <div>
                 <p className="text-sm font-medium">
-                  {hasAccess === null ? 'Checking…' : hasAccess ? 'Access allowed' : 'Access not allowed'}
+                  {hasAccess === null
+                    ? t('options.checkingAccess')
+                    : hasAccess
+                      ? t('options.accessAllowed')
+                      : t('options.accessNotAllowed')}
                 </p>
                 <p className="text-xs text-neutral-600 dark:text-neutral-400">
-                  {hasAccess
-                    ? 'Tabs can be read. Sites in the block list below stay off limits.'
-                    : 'Your browser will ask you to confirm. Needed to attach tabs or use browser tools.'}
+                  {hasAccess ? t('options.accessAllowedDesc') : t('options.accessNotAllowedDesc')}
                 </p>
               </div>
             </div>
             {hasAccess ? (
               <button type="button" className={buttonClass} onClick={revokeAccess}>
-                Remove access
+                {t('options.removeAccess')}
               </button>
             ) : (
               <button type="button" className={primaryButtonClass} onClick={allowAccess} disabled={hasAccess === null}>
-                Allow access
+                {t('options.allowAccess')}
               </button>
             )}
           </div>
           {accessNote ? <span className={caution}>{accessNote}</span> : null}
 
           <ToggleRow
-            label="AI can read your tabs"
-            hint="Lets the AI list your tabs and read their pages using tools."
+            label={t('options.aiCanReadLabel')}
+            hint={t('options.aiCanReadHint')}
             checked={settings.browserToolsEnabled && !!hasAccess}
             onChange={toggleBrowserTools}
           />
           <ToggleRow
-            label="AI can control tabs"
-            hint={<span className={caution}>Open, close, navigate and focus tabs, not just read them.</span>}
+            label={t('options.aiCanControlLabel')}
+            hint={<span className={caution}>{t('options.aiCanControlHint')}</span>}
             checked={settings.browserControlEnabled}
             disabled={!settings.browserToolsEnabled || !hasAccess}
             onChange={v => update({ browserControlEnabled: v })}
           />
 
-          <Field label="Blocked sites" hint="The AI can never read or touch these, e.g. mail.google.com.">
+          <Field label={t('options.blockedSitesLabel')} hint={t('options.blockedSitesHint')}>
             <div className="flex gap-2">
               <input
                 className={inputClass}
@@ -223,7 +237,7 @@ const OptionsInner = () => {
                 }}
               />
               <button type="button" className={buttonClass} onClick={addDeny}>
-                Add
+                {t('common.add')}
               </button>
             </div>
             {settings.domainDenylist.length > 0 ? (
@@ -235,7 +249,7 @@ const OptionsInner = () => {
                     {host}
                     <button
                       type="button"
-                      aria-label={`Remove ${host}`}
+                      aria-label={t('options.removeSiteAria', { host })}
                       className="flex h-4 w-4 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-300 hover:text-neutral-800 dark:hover:bg-neutral-700 dark:hover:text-neutral-100"
                       onClick={() => update({ domainDenylist: settings.domainDenylist.filter(h => h !== host) })}>
                       ×
@@ -248,8 +262,8 @@ const OptionsInner = () => {
         </Card>
 
         {/* 2. MCP server */}
-        <Card title="MCP server" description="Where SuperAssistant finds your tools, usually the local proxy.">
-          <Field label="Server URL">
+        <Card title={t('options.mcpServerTitle')} description={t('options.mcpServerDesc')}>
+          <Field label={t('options.serverUrlLabel')}>
             <div className="flex items-center gap-3">
               <input
                 className={inputClass}
@@ -259,11 +273,11 @@ const OptionsInner = () => {
               />
               <span className="flex items-center gap-1.5 whitespace-nowrap text-xs text-neutral-500 dark:text-neutral-400">
                 <StatusDot state={connected} />
-                {connected === null ? 'Unknown' : connected ? 'Connected' : 'Disconnected'}
+                {connected === null ? t('common.unknown') : connected ? t('server.connected') : t('server.disconnected')}
               </span>
             </div>
           </Field>
-          <Field label="Transport">
+          <Field label={t('options.transportLabel')}>
             <select className={inputClass} value={ctype} onChange={e => setCtype(e.target.value as ConnectionType)}>
               <option value="sse">SSE</option>
               <option value="websocket">WebSocket</option>
@@ -272,7 +286,7 @@ const OptionsInner = () => {
           </Field>
           <div className="flex items-center gap-3">
             <button type="button" className={primaryButtonClass} onClick={saveServer}>
-              Save
+              {t('common.save')}
             </button>
             <SavedTag show={mcpSaved} />
             {mcpErr ? <span className={caution}>{mcpErr}</span> : null}
@@ -280,22 +294,22 @@ const OptionsInner = () => {
         </Card>
 
         {/* 3. Page capture */}
-        <Card title="Page capture" description="Send the page you are on to an AI chat with a keyboard shortcut.">
-          <Field label="Shortcut">
+        <Card title={t('options.pageCaptureTitle')} description={t('options.pageCaptureDesc')}>
+          <Field label={t('options.shortcutLabel')}>
             <div className="flex items-center gap-3">
               <kbd className="rounded-md border border-neutral-300 bg-neutral-100 px-2.5 py-1 font-mono text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200">
-                {shortcut === null ? '…' : shortcut || 'Not set'}
+                {shortcut === null ? '…' : shortcut || t('options.shortcutNotSet')}
               </kbd>
               <button
                 type="button"
                 className={buttonClass}
                 onClick={() => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' })}>
-                Change
+                {t('common.change')}
               </button>
             </div>
           </Field>
 
-          <Field label="Send to">
+          <Field label={t('options.sendToLabel')}>
             <select
               className={inputClass}
               value={settings.defaultAiPlatform}
@@ -313,38 +327,38 @@ const OptionsInner = () => {
               value={settings.openBehavior}
               onChange={v => update({ openBehavior: v })}
               options={[
-                { value: 'focus-existing', label: 'Use an open tab if there is one' },
-                { value: 'always-new-tab', label: 'Always open a new tab' },
+                { value: 'focus-existing', label: t('options.openExistingTab') },
+                { value: 'always-new-tab', label: t('options.openNewTab') },
               ]}
             />
           </Field>
 
-          <Field label="What to capture">
+          <Field label={t('options.whatToCaptureLabel')}>
             <RadioGroup
               name="captureMode"
               value={settings.captureMode}
               onChange={v => update({ captureMode: v })}
               options={[
-                { value: 'article', label: 'Main article' },
-                { value: 'full_text', label: 'All page text' },
+                { value: 'article', label: t('options.captureArticle') },
+                { value: 'full_text', label: t('options.captureFullText') },
               ]}
             />
           </Field>
 
           <ToggleRow
-            label="Send right away"
-            hint={<span className={caution}>Submits the message as soon as it is inserted.</span>}
+            label={t('options.sendRightAwayLabel')}
+            hint={<span className={caution}>{t('options.sendRightAwayHint')}</span>}
             checked={settings.autoSubmitCapture}
             onChange={v => update({ autoSubmitCapture: v })}
           />
 
           <details className="group">
             <summary className="cursor-pointer select-none text-sm font-medium text-neutral-800 dark:text-neutral-200">
-              Message template
+              {t('options.messageTemplateSummary')}
             </summary>
             <div className="mt-3 flex flex-col gap-2">
               <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                Placeholders: <code>{'{title}'}</code> <code>{'{url}'}</code> <code>{'{content}'}</code>
+                {t('options.placeholdersLabel')} <code>{'{title}'}</code> <code>{'{url}'}</code> <code>{'{content}'}</code>
               </span>
               <textarea
                 className={`${inputClass} min-h-[140px] resize-y font-mono text-xs`}
@@ -357,7 +371,7 @@ const OptionsInner = () => {
                   type="button"
                   className={buttonClass}
                   onClick={() => update({ captureTemplate: BROWSER_BRIDGE_DEFAULTS.captureTemplate })}>
-                  Reset to default
+                  {t('common.resetToDefault')}
                 </button>
               </div>
             </div>
@@ -365,10 +379,10 @@ const OptionsInner = () => {
         </Card>
 
         {/* 4. Usage statistics (opt-out) */}
-        <Card title="Usage statistics" description="Anonymous counts that show which features and sites are used.">
+        <Card title={t('options.telemetryTitle')} description={t('options.telemetryDesc')}>
           <ToggleRow
-            label="Share anonymous usage statistics"
-            hint="Sends a random install id, the extension version, your browser and OS, which supported AI sites you used and how many times each feature ran. Never sends chat content, page content, URLs, tool names or arguments."
+            label={t('options.shareStatsLabel')}
+            hint={t('options.shareStatsHint')}
             checked={telemetrySettings.enabled}
             onChange={v => {
               void telemetryStorage.set({ enabled: v });
@@ -378,10 +392,10 @@ const OptionsInner = () => {
           {dataConsent === false && telemetrySettings.enabled ? (
             <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
               <span className="text-neutral-600 dark:text-neutral-300">
-                Firefox has not been given permission to share these statistics, so nothing is sent.
+                {t('options.firefoxStatsNeedPermission')}
               </span>
               <button type="button" className={primaryButtonClass} onClick={() => void requestDataConsent()}>
-                Allow
+                {t('common.allow')}
               </button>
             </div>
           ) : null}

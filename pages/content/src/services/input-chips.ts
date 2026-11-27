@@ -1,5 +1,6 @@
 import type { AdapterPlugin, ChipAnchors } from '../plugins/plugin-types';
 import { createLogger } from '@extension/shared/lib/logger';
+import { subscribeI18n, t } from '@extension/shared';
 import { cancelAistudioSubmission } from '../render_prescript/src/provenance/aistudioTurnGate';
 import { useToolStore } from '../stores/tool.store';
 import { generateBrowserPrimer } from '../components/sidebar/Instructions/instructionGeneratorCompact';
@@ -57,6 +58,7 @@ export type ChipSource = 'instructions' | 'tool-result' | 'capture' | 'tab-conte
 interface Chip {
   id: string;
   label: string;
+  customLabel?: string;
   text: string;
   source: ChipSource;
 }
@@ -71,27 +73,31 @@ interface CaptureOptions {
 function labelFor(source: ChipSource | undefined, text: string): string {
   switch (source) {
     case 'instructions':
-      return 'MCP Instructions';
+      return t('chips.mcpInstructions');
     case 'tool-result': {
       const m = text.match(/<function_result call_id="(\d+)"/);
-      return m ? `Tool result #${m[1]}` : 'Tool result';
+      return m ? t('chips.toolResultWithId', { id: m[1] }) : t('chips.toolResult');
     }
     case 'capture': {
       const m = text.match(/^Page: (.+)$/m);
-      return m ? m[1].slice(0, 40) : 'Captured page';
+      return m ? m[1].slice(0, 40) : t('chips.capturedPage');
     }
     case 'tab-content':
-      return 'Browser tabs';
+      return t('chips.browserTabs');
     case 'unknown':
     default: {
       // Heuristic chain (sidebar + render_prescript callers can't pass a source).
       const lower = text.toLowerCase();
-      if (lower.includes('[start fresh session from here]') || lower.includes('<system>')) return 'MCP Instructions';
+      if (lower.includes('[start fresh session from here]') || lower.includes('<system>')) {
+        return t('chips.mcpInstructions');
+      }
       const fr = text.match(/<function_result call_id="(\d+)"/);
-      if (fr) return `Tool result #${fr[1]}`;
+      if (fr) return t('chips.toolResultWithId', { id: fr[1] });
       const tabs = text.match(/^Attached (\d+) browser tabs?/);
-      if (tabs) return `${tabs[1]} browser tab${tabs[1] === '1' ? '' : 's'}`;
-      return 'Injected text';
+      if (tabs) {
+        return t(tabs[1] === '1' ? 'chips.browserTabSingle' : 'chips.browserTabPlural', { count: tabs[1] });
+      }
+      return t('chips.injectedText');
     }
   }
 }
@@ -263,6 +269,14 @@ class InputChipManager {
   private openPreviewChipId: string | null = null;
   private themeVars: Record<string, string> = {};
 
+  constructor() {
+    subscribeI18n(() => {
+      if (this.chips.length > 0 && this.bar) {
+        this.renderBar();
+      }
+    });
+  }
+
   /** Called from pilot insertText. Returns true if the payload was captured as a chip (→ caller returns early). */
   tryCapture(adapter: AdapterPlugin, text: string, options?: CaptureOptions): boolean {
     if (this.flushing) return false;
@@ -275,6 +289,7 @@ class InputChipManager {
     this.chips.push({
       id: crypto.randomUUID(),
       label: options?.label ?? labelFor(options?.source, text),
+      customLabel: options?.label,
       text,
       source: options?.source ?? 'unknown',
     });
@@ -467,12 +482,13 @@ class InputChipManager {
 
       const text = document.createElement('span');
       text.className = 'chip-text';
+      const displayLabel = chip.customLabel ?? labelFor(chip.source, chip.text);
       const label = document.createElement('span');
       label.className = 'chip-label';
-      label.textContent = chip.label;
+      label.textContent = displayLabel;
       const detail = document.createElement('span');
       detail.className = 'chip-detail';
-      detail.textContent = `${formatCount(chip.text.length)} chars`;
+      detail.textContent = t('chips.charsCount', { count: formatCount(chip.text.length) });
       text.appendChild(label);
       text.appendChild(detail);
       pill.appendChild(text);
@@ -481,7 +497,7 @@ class InputChipManager {
       const eye = document.createElement('span');
       eye.className = 'chip-eye';
       eye.setAttribute('role', 'button');
-      eye.setAttribute('aria-label', 'Preview contents');
+      eye.setAttribute('aria-label', t('chips.previewTooltip'));
       eye.innerHTML = EYE_ICON;
       eye.addEventListener('click', e => {
         e.stopPropagation();
@@ -493,7 +509,7 @@ class InputChipManager {
       const x = document.createElement('span');
       x.className = 'chip-x';
       x.setAttribute('role', 'button');
-      x.setAttribute('aria-label', `Remove ${chip.label}`);
+      x.setAttribute('aria-label', t('chips.removeTooltip', { label: displayLabel }));
       x.textContent = '×';
       x.addEventListener('click', e => {
         e.stopPropagation();
@@ -563,14 +579,14 @@ class InputChipManager {
     roundel.innerHTML = ICONS[chip.source];
     const title = document.createElement('span');
     title.className = 'preview-title';
-    title.textContent = chip.label;
+    title.textContent = chip.customLabel ?? labelFor(chip.source, chip.text);
     const count = document.createElement('span');
     count.className = 'preview-count';
-    count.textContent = `${formatCount(chip.text.length)} chars`;
+    count.textContent = t('chips.charsCount', { count: formatCount(chip.text.length) });
     const close = document.createElement('span');
     close.className = 'preview-close';
     close.setAttribute('role', 'button');
-    close.setAttribute('aria-label', 'Close preview');
+    close.setAttribute('aria-label', t('chips.closePreviewTooltip'));
     close.textContent = '×';
     close.addEventListener('click', e => {
       e.stopPropagation();

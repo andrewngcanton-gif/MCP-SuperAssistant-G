@@ -59,7 +59,7 @@
   overflow-y: auto;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08),
               0 1px 6px rgba(0, 0, 0, 0.04);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', Roboto, Helvetica, Arial, sans-serif;
   will-change: width, transform;
   transform: translateZ(0); /* Force GPU acceleration */
   contain: layout style;
@@ -472,11 +472,11 @@
 
 /* Font styles */
 .sidebar h1, .sidebar h2, .sidebar h3, .sidebar h4, .sidebar h5, .sidebar h6 {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', Roboto, Helvetica, Arial, sans-serif;
 }
 
-.sidebar p, .sidebar span, .sidebar div, .sidebar button, .sidebar input {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+.sidebar p, .sidebar span, .sidebar div, .sidebar label, .sidebar button, .sidebar input, .sidebar select, .sidebar option, .sidebar textarea {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', Roboto, Helvetica, Arial, sans-serif;
 }
 
 /* Resize handle styles */

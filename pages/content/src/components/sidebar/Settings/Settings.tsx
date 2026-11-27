@@ -1,4 +1,5 @@
 import React from 'react';
+import { useI18n, type LanguagePreference } from '@extension/shared';
 import { useUserPreferences } from '@src/hooks';
 import { ToggleWithoutLabel, Button } from '../ui';
 import { AutomationService } from '@src/services/automation.service';
@@ -22,6 +23,7 @@ const delayInputClass =
 
 const Settings: React.FC = () => {
   const { preferences, updatePreferences } = useUserPreferences();
+  const { t, preference, setLanguage } = useI18n();
 
   const isPushMode = preferences.isPushMode ?? false;
 
@@ -75,25 +77,47 @@ const Settings: React.FC = () => {
 
   return (
     <div className="py-3 space-y-5">
+      {/* Language */}
+      <div className="space-y-2">
+        <div className={sectionLabelClass}>{t('language.section')}</div>
+        <div className="flex items-center justify-between gap-3 py-1">
+          <div className="min-w-0">
+            <label htmlFor="ui-language" className="block text-sm text-slate-700 dark:text-slate-300">
+              {t('language.label')}
+            </label>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('language.hint')}</p>
+          </div>
+          <select
+            id="ui-language"
+            value={preference}
+            onChange={e => setLanguage(e.target.value as LanguagePreference)}
+            className="h-8 shrink-0 text-sm leading-normal rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 pl-2.5 pr-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+            <option value="auto">{t('language.auto')}</option>
+            <option value="zh-CN">{t('language.zhCN')}</option>
+            <option value="en">{t('language.en')}</option>
+          </select>
+        </div>
+      </div>
+
       {/* Layout */}
       <div className="space-y-2">
-        <div className={sectionLabelClass}>Layout</div>
+        <div className={sectionLabelClass}>{t('settings.layoutSection')}</div>
         <div className="flex items-center justify-between py-1">
-          <label className="text-sm text-slate-700 dark:text-slate-300">Push Content Mode</label>
-          <ToggleWithoutLabel label="Push Content Mode" checked={isPushMode} onChange={handlePushModeToggle} />
+          <label className="text-sm text-slate-700 dark:text-slate-300">{t('settings.pushContentMode')}</label>
+          <ToggleWithoutLabel label={t('settings.pushContentMode')} checked={isPushMode} onChange={handlePushModeToggle} />
         </div>
       </div>
 
       {/* Automation delays */}
       <div className="space-y-2">
-        <div className={sectionLabelClass}>Automation delays</div>
+        <div className={sectionLabelClass}>{t('settings.delaysSection')}</div>
 
         <div className="flex items-center justify-between py-1">
           <div>
             <label htmlFor="auto-insert-delay" className="block text-sm text-slate-700 dark:text-slate-300">
-              Auto insert
+              {t('settings.autoInsertLabel')}
             </label>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Delay before inserting content</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.autoInsertDesc')}</p>
           </div>
           <input
             id="auto-insert-delay"
@@ -108,9 +132,9 @@ const Settings: React.FC = () => {
         <div className="flex items-center justify-between py-1">
           <div>
             <label htmlFor="auto-submit-delay" className="block text-sm text-slate-700 dark:text-slate-300">
-              Auto submit
+              {t('settings.autoSubmitLabel')}
             </label>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Delay before submitting form</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.autoSubmitDesc')}</p>
           </div>
           <input
             id="auto-submit-delay"
@@ -125,9 +149,9 @@ const Settings: React.FC = () => {
         <div className="flex items-center justify-between py-1">
           <div>
             <label htmlFor="auto-execute-delay" className="block text-sm text-slate-700 dark:text-slate-300">
-              Auto execute
+              {t('settings.autoExecuteLabel')}
             </label>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Delay before executing functions</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.autoExecuteDesc')}</p>
           </div>
           <input
             id="auto-execute-delay"
@@ -143,7 +167,7 @@ const Settings: React.FC = () => {
       {/* Developer (dev builds only) */}
       {process.env.NODE_ENV === 'development' && (
         <div className="space-y-2">
-          <div className={sectionLabelClass}>Developer</div>
+          <div className={sectionLabelClass}>{t('settings.developerSection')}</div>
           <Button
             variant="outline"
             size="sm"
@@ -159,7 +183,7 @@ const Settings: React.FC = () => {
                 logMessage('Cannot debug: Shadow DOM not found');
               }
             }}>
-            Debug Styles
+            {t('settings.debugStyles')}
           </Button>
         </div>
       )}

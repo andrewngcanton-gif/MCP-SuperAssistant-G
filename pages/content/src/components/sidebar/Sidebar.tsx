@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useI18n } from '@extension/shared';
 import { useCurrentAdapter } from '@src/hooks/useAdapter';
 import { useTheme, useSidebarState, useUserPreferences, useConnectionStatus } from '@src/hooks';
 import { useUIStore } from '@src/stores/ui.store';
@@ -38,6 +39,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
+  const { t } = useI18n();
   // Add unique ID to track component instances
   const componentId = useRef(`sidebar-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`);
   logMessage(
@@ -614,6 +616,33 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
     }
   };
 
+  const getThemeLabel = (): string => {
+    switch (theme) {
+      case 'light':
+        return t('sidebar.themeLight');
+      case 'dark':
+        return t('sidebar.themeDark');
+      case 'system':
+      default:
+        return t('sidebar.themeSystem');
+    }
+  };
+
+  const getServerStatusLabel = (): string => {
+    switch (serverStatus) {
+      case 'connected':
+        return t('server.connected');
+      case 'reconnecting':
+        return t('server.reconnecting');
+      case 'disconnected':
+        return t('server.disconnected');
+      case 'error':
+        return t('server.error');
+      default:
+        return t('server.unknown');
+    }
+  };
+
   const tabClass = (active: boolean) =>
     cn(
       'py-2 px-3 text-xs font-medium border-b-2 transition-colors duration-150',
@@ -660,19 +689,19 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                 variant="ghost"
                 size="icon"
                 onClick={handleThemeToggle}
-                aria-label={`Toggle theme (current: ${theme})`}
-                title="Toggle theme"
+                aria-label={t('sidebar.toggleThemeAria', { theme: getThemeLabel() })}
+                title={t('sidebar.toggleTheme')}
                 className="h-7 w-7 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800">
                 <Icon name={getCurrentThemeIcon()} size="sm" />
-                <span className="sr-only">Toggle theme</span>
+                <span className="sr-only">{t('sidebar.toggleTheme')}</span>
               </Button>
               {/* Minimize Button */}
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handleToggleMinimize}
-                aria-label="Minimize sidebar"
-                title="Minimize sidebar"
+                aria-label={t('sidebar.minimize')}
+                title={t('sidebar.minimize')}
                 className="h-7 w-7 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800">
                 <Icon name="chevron-right" className="h-4 w-4" />
               </Button>
@@ -685,8 +714,8 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
               variant="ghost"
               size="icon"
               onClick={handleToggleMinimize}
-              aria-label="Expand sidebar"
-              title="Expand sidebar"
+              aria-label={t('sidebar.expand')}
+              title={t('sidebar.expand')}
               className="h-7 w-7 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800">
               <Icon name="chevron-left" className="h-4 w-4" />
             </Button>
@@ -700,7 +729,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                     ? 'bg-rose-500'
                     : 'bg-amber-500',
               )}
-              aria-label={`Server ${serverStatus}`}
+              aria-label={t('sidebar.serverStatusAria', { status: getServerStatusLabel() })}
             />
           </div>
         )}
@@ -726,12 +755,12 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                     <Icon name="alert-triangle" size="sm" className="text-red-600 dark:text-red-400 mt-0.5" />
                     <div className="flex-1">
                       <Typography variant="subtitle" className="text-red-800 dark:text-red-200 font-medium">
-                        {extensionContextInvalid ? 'Extension Reloaded' : 'Warning'}
+                        {extensionContextInvalid ? t('sidebar.extensionReloadedTitle') : t('sidebar.warningTitle')}
                       </Typography>
                       <Typography variant="caption" className="text-red-700 dark:text-red-300">
                         {extensionContextInvalid
-                          ? 'The extension was reloaded. Please refresh this page to restore full functionality.'
-                          : `Some features may be limited: ${initializationError}`
+                          ? t('sidebar.extensionReloadedBody')
+                          : t('sidebar.limitedFeatures', { error: initializationError })
                         }
                       </Typography>
                       {extensionContextInvalid && (
@@ -741,7 +770,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                             size="sm"
                             onClick={() => window.location.reload()}
                             className="border-red-300 dark:border-red-600 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-800 mr-2">
-                            Refresh Page
+                            {t('sidebar.refreshPage')}
                           </Button>
                         </div>
                       )}
@@ -753,7 +782,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                       size="sm"
                       onClick={() => setInitializationError(null)}
                       className="border-red-300 dark:border-red-600 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-800">
-                      Dismiss
+                      {t('common.dismiss')}
                     </Button>
                   )}
                 </div>
@@ -769,20 +798,20 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
               <div className="border-b border-slate-200 dark:border-slate-700 mb-2">
                 <div className="flex">
                   <button className={tabClass(activeTab === 'availableTools')} onClick={() => setActiveTab('availableTools')}>
-                    Tools
+                    {t('sidebar.tabTools')}
                     {totalToolsCount > 0 && (
                       <span
-                        title={`${enabledToolsCount} of ${totalToolsCount} tools enabled`}
+                        title={t('sidebar.toolsCountTooltip', { enabled: enabledToolsCount, total: totalToolsCount })}
                         className="ml-1.5 text-[10px] px-1.5 rounded-full bg-slate-100 dark:bg-slate-800 tabular-nums">
                         {enabledToolsCount}/{totalToolsCount}
                       </span>
                     )}
                   </button>
                   <button className={tabClass(activeTab === 'instructions')} onClick={() => setActiveTab('instructions')}>
-                    Instructions
+                    {t('sidebar.tabInstructions')}
                   </button>
                   <button className={tabClass(activeTab === 'settings')} onClick={() => setActiveTab('settings')}>
-                    Settings
+                    {t('sidebar.tabSettings')}
                   </button>
                 </div>
               </div>

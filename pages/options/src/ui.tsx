@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useI18n } from '@extension/shared';
 
 export const inputClass =
   'w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition ' +
@@ -104,16 +105,19 @@ export const RadioGroup = <T extends string>({
   </div>
 );
 
-export const SavedTag = ({ show }: { show: boolean }) => (
-  <span
-    aria-live="polite"
-    className={
-      'text-xs font-medium text-green-600 transition-opacity duration-300 dark:text-green-400 ' +
-      (show ? 'opacity-100' : 'opacity-0')
-    }>
-    Saved
-  </span>
-);
+export const SavedTag = ({ show }: { show: boolean }) => {
+  const { t } = useI18n();
+  return (
+    <span
+      aria-live="polite"
+      className={
+        'text-xs font-medium text-green-600 transition-opacity duration-300 dark:text-green-400 ' +
+        (show ? 'opacity-100' : 'opacity-0')
+      }>
+      {t('common.saved')}
+    </span>
+  );
+};
 
 export const primaryButtonClass =
   'inline-flex items-center justify-center rounded-md border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-medium ' +

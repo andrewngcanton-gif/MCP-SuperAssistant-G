@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useI18n } from '@extension/shared';
 import { useAdapterStore } from '../../stores/adapter.store';
 import { createLogger } from '@extension/shared/lib/logger';
 
@@ -61,6 +62,7 @@ const domainOf = (url: string): string => {
 type AttachPhase = 'idle' | { fetching: number } | 'inserting' | 'done';
 
 export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) => {
+  const { t } = useI18n();
   const [tabs, setTabs] = useState<TabInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +93,7 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
     chrome.runtime.sendMessage({ type: 'browser-bridge:list-tabs' }, resp => {
       if (!mountedRef.current) return;
       if (chrome.runtime.lastError || !resp?.success) {
-        setError(resp?.error || chrome.runtime.lastError?.message || 'Could not list tabs.');
+        setError(resp?.error || chrome.runtime.lastError?.message || t('tabs.listError'));
         setLoading(false);
         return;
       }
@@ -143,7 +145,7 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
         ),
       );
       if (!resp?.success) {
-        localFailures.push({ title: tab?.title || String(ids[i]), error: resp?.error || 'Failed to read tab.' });
+        localFailures.push({ title: tab?.title || String(ids[i]), error: resp?.error || t('tabs.readError') });
         continue;
       }
       const n = blocks.length + 1;
@@ -155,7 +157,7 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
 
     if (blocks.length === 0) {
       setFailures(localFailures);
-      setAttachSummary(`Attached 0 of ${ids.length} tabs`);
+      setAttachSummary(t('tabs.attachedSummary', { attached: 0, total: ids.length }));
       setAttachPhase('idle');
       return;
     }
@@ -165,11 +167,14 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
     // Resolve adapter at insert time — the popover may have closed / switched mid-fetch.
     const plugin = useAdapterStore.getState().getActiveAdapter()?.plugin;
     try {
-      await plugin?.insertText?.(header + blocks.join('\n\n'), { source: 'tab-content', label: `${blocks.length} browser tab${blocks.length > 1 ? 's' : ''}` });
+      await plugin?.insertText?.(header + blocks.join('\n\n'), {
+        source: 'tab-content',
+        label: t(blocks.length === 1 ? 'chips.browserTabSingle' : 'chips.browserTabPlural', { count: blocks.length }),
+      });
     } catch (err) {
       logger.error('[TabPicker] insertText failed:', err);
       if (mountedRef.current) {
-        setFailures([...localFailures, { title: 'Insert', error: String(err) }]);
+        setFailures([...localFailures, { title: t('tabs.insertErrorTitle'), error: String(err) }]);
         setAttachPhase('idle');
       }
       return;
@@ -178,7 +183,7 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
     if (!mountedRef.current) return;
     if (localFailures.length > 0) {
       setFailures(localFailures);
-      setAttachSummary(`Attached ${blocks.length} of ${ids.length} tabs`);
+      setAttachSummary(t('tabs.attachedSummary', { attached: blocks.length, total: ids.length }));
       setAttachPhase('idle');
     } else {
       setAttachPhase('done');
@@ -188,12 +193,12 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
 
   const attachLabel =
     typeof attachPhase === 'object'
-      ? `Fetching ${attachPhase.fetching}/${selected.size}…`
+      ? t('tabs.fetchingProgress', { current: attachPhase.fetching, total: selected.size })
       : attachPhase === 'inserting'
-        ? 'Inserting…'
+        ? t('tabs.inserting')
         : attachPhase === 'done'
-          ? 'Attached!'
-          : `Attach ${selected.size} tab${selected.size === 1 ? '' : 's'}`;
+          ? t('tabs.attached')
+          : t(selected.size === 1 ? 'tabs.attachSingle' : 'tabs.attachPlural', { count: selected.size });
 
   const secondaryBtnStyle: React.CSSProperties = {
     padding: '6px 10px',
@@ -232,7 +237,7 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
           paddingBottom: flyout ? 8 : 4,
           borderBottom: `1px solid ${theme.dividerColor}`,
         }}>
-        <span>Attach tabs</span>
+        <span>{t('tabs.title')}</span>
         {flyout && !loading && !error && (
           <span
             style={{
@@ -240,7 +245,7 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
               fontWeight: 500,
               color: selected.size > 0 ? theme.buttonBackgroundActive ?? theme.secondaryText : theme.secondaryText,
             }}>
-            {selected.size} selected
+            {t('tabs.selectedCount', { count: selected.size })}
           </span>
         )}
       </div>
@@ -259,36 +264,36 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
             flexDirection: 'column',
             gap: 8,
           }}>
-          <span>Allow browser access so SuperAssistant can read the tabs you attach.</span>
+          <span>{t('tabs.permissionPrompt')}</span>
           <button
             style={{ ...secondaryBtnStyle, alignSelf: 'flex-start' }}
             onClick={() => chrome.runtime.sendMessage({ type: 'browser-bridge:request-access' })}
             type="button">
-            Allow access
+            {t('tabs.allowAccess')}
           </button>
         </div>
       )}
 
       {loading ? (
         <div style={{ color: theme.secondaryText, fontStyle: 'italic', padding: '20px', textAlign: 'center' }}>
-          Loading tabs…
+          {t('tabs.loading')}
         </div>
       ) : error ? (
         <div style={{ color: theme.secondaryText, padding: '20px', textAlign: 'center' }}>{error}</div>
       ) : tabs.length === 0 ? (
-        <div style={{ color: theme.secondaryText, padding: '20px', textAlign: 'center' }}>No other tabs open</div>
+        <div style={{ color: theme.secondaryText, padding: '20px', textAlign: 'center' }}>{t('tabs.empty')}</div>
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <button style={secondaryBtnStyle} onClick={selectAll} disabled={attaching} type="button">
-              Select all
+              {t('tabs.selectAll')}
             </button>
             <button style={secondaryBtnStyle} onClick={clearAll} disabled={attaching} type="button">
-              Clear
+              {t('tabs.clear')}
             </button>
             {!flyout && (
               <span style={{ marginLeft: 'auto', fontSize: 12, color: theme.secondaryText }}>
-                {selected.size} selected
+                {t('tabs.selectedCount', { count: selected.size })}
               </span>
             )}
           </div>
@@ -346,7 +351,7 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
                         textOverflow: 'ellipsis',
                       }}>
                       {tab.title || domainOf(tab.url)}
-                      {isSender && <span style={{ color: theme.secondaryText }}> (this tab)</span>}
+                      {isSender && <span style={{ color: theme.secondaryText }}> {t('tabs.thisTab')}</span>}
                     </div>
                     <div
                       style={{
@@ -387,7 +392,7 @@ export const TabPicker: React.FC<TabPickerProps> = ({ theme, onDone, flyout }) =
           onMouseEnter={flyout ? e => (e.currentTarget.style.background = theme.secondaryBackground) : undefined}
           onMouseLeave={flyout ? e => (e.currentTarget.style.background = 'transparent') : undefined}
           type="button">
-          {flyout ? 'Cancel' : 'Back'}
+          {flyout ? t('common.cancel') : t('common.back')}
         </button>
         <button
           className="mcp-instruction-btn"

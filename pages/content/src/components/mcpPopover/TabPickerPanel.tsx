@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '@extension/shared';
 import TabPicker, { type TabPickerTheme } from './TabPicker';
 
 interface Rect {
@@ -63,6 +64,7 @@ const TabPickerPanel: React.FC<TabPickerPanelProps> = ({
   onPointerEnter,
   onPointerLeave,
 }) => {
+  const { t } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<Position>(() => computePosition(anchorRect));
 
@@ -115,7 +117,7 @@ const TabPickerPanel: React.FC<TabPickerPanelProps> = ({
       id="mcp-tab-flyout"
       ref={panelRef}
       role="dialog"
-      aria-label="Attach tabs"
+      aria-label={t('tabs.attachAria')}
       className={`mcp-tab-flyout mcp-tab-flyout--${pos.up ? 'up' : 'down'}`}
       style={{ left: pos.left, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight }}
       onMouseEnter={onPointerEnter}

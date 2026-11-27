@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useI18n } from '@extension/shared';
 // import { generateInstructions } from './instructionGenerator';
 import { generateInstructionsForPreferences } from './instructionPipeline';
 import { useUserPreferences, useToolEnablement } from '../../../hooks';
@@ -52,6 +53,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, disabled, loading,
 };
 
 const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools }) => {
+  const { t } = useI18n();
   // Use Zustand hooks for user preferences and tool enablement
   const { preferences, updatePreferences } = useUserPreferences();
   const { enabledTools: enabledToolsSet, isToolEnabled } = useToolEnablement();
@@ -325,24 +327,23 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
     <div className="space-y-3 pt-1">
       {/* RTK / WebCodex opt-in */}
       <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800 sidebar-card">
-        <div className="px-3 py-2 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-slate-700 dark:text-slate-300">Use RTK with WebCodex</div>
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">
-              Adds RTK output-compression guidance to generated instructions when a WebCodex run tool is enabled. Off
-              by default.
-            </div>
+        <div className="px-3 py-2.5 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('instructions.useRtkTitle')}</div>
+            <label className="flex items-center gap-1.5 shrink-0 cursor-pointer">
+              <input
+                type="checkbox"
+                aria-label={t('instructions.useRtkTitle')}
+                checked={preferences.useRtkWithWebCodex}
+                onChange={e => updatePreferences({ useRtkWithWebCodex: e.target.checked })}
+                className="h-4 w-4 rounded accent-indigo-600"
+              />
+              <span className="text-xs text-slate-500 dark:text-slate-400">{t('common.enable')}</span>
+            </label>
           </div>
-          <label className="flex items-center gap-1.5 shrink-0">
-            <input
-              type="checkbox"
-              aria-label="Use RTK with WebCodex"
-              checked={preferences.useRtkWithWebCodex}
-              onChange={e => updatePreferences({ useRtkWithWebCodex: e.target.checked })}
-              className="h-4 w-4 rounded accent-indigo-600"
-            />
-            <span className="text-xs text-slate-500 dark:text-slate-400">Enable</span>
-          </label>
+          <div className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+            {t('instructions.useRtkDesc')}
+          </div>
         </div>
       </div>
 
@@ -350,7 +351,7 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
       <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800 sidebar-card">
         <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Custom Instructions</span>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('instructions.customTitle')}</span>
             <label className="flex items-center gap-1.5">
               <input
                 type="checkbox"
@@ -358,20 +359,20 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
                 onChange={e => handleCustomInstructionsToggle(e.target.checked)}
                 className="h-4 w-4 rounded accent-indigo-600"
               />
-              <span className="text-xs text-slate-500 dark:text-slate-400">Enable</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{t('common.enable')}</span>
             </label>
           </div>
           <div className="flex items-center gap-1.5">
             {isEditingCustom ? (
               <>
-                <ActionButton onClick={handleCustomInstructionsSave} color="green" label="Save" />
-                <ActionButton onClick={handleCustomInstructionsCancel} color="red" label="Cancel" />
+                <ActionButton onClick={handleCustomInstructionsSave} color="green" label={t('common.save')} />
+                <ActionButton onClick={handleCustomInstructionsCancel} color="red" label={t('common.cancel')} />
               </>
             ) : (
               <ActionButton
                 onClick={() => setIsEditingCustom(true)}
                 color="blue"
-                label="Edit"
+                label={t('common.edit')}
                 disabled={!customInstructionsEnabled}
               />
             )}
@@ -383,7 +384,7 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
             <textarea
               value={customInstructions}
               onChange={e => setCustomInstructions(e.target.value)}
-              placeholder="Enter your custom instructions here..."
+              placeholder={t('instructions.customPlaceholder')}
               className="w-full h-32 p-2 text-sm border border-slate-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-200"
             />
           ) : (
@@ -394,7 +395,7 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
                 </pre>
               ) : (
                 <div className="text-xs text-slate-500 dark:text-slate-400 italic p-3">
-                  {customInstructionsEnabled ? 'No custom instructions set' : 'Custom instructions disabled'}
+                  {customInstructionsEnabled ? t('instructions.customEmpty') : t('instructions.customDisabled')}
                 </div>
               )}
             </div>
@@ -405,16 +406,16 @@ const InstructionManager: React.FC<InstructionManagerProps> = ({ adapter, tools 
       {/* Main Instructions Panel */}
       <div className="rounded-lg bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800 sidebar-card">
         <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Instructions</span>
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('instructions.mainTitle')}</span>
           <div className="flex items-center gap-1.5">
             {isEditing ? (
               <>
-                <ActionButton onClick={handleSave} color="green" label="Save" />
-                <ActionButton onClick={handleCancel} color="red" label="Cancel" />
+                <ActionButton onClick={handleSave} color="green" label={t('common.save')} />
+                <ActionButton onClick={handleCancel} color="red" label={t('common.cancel')} />
               </>
             ) : (
               <>
-                <ActionButton onClick={() => setIsEditing(true)} color="blue" label="Edit" />
+                <ActionButton onClick={() => setIsEditing(true)} color="blue" label={t('common.edit')} />
                 {/* <ActionButton 
                   onClick={handleCopyToClipboard} 
                   loading={isCopying}
