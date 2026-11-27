@@ -123,6 +123,10 @@ Once the proxy is running, choose **SSE** in the extension sidebar's connection 
 ### 5. Test and update
 
 - Open the **MCP** menu by the composer, click **Insert** to add MCP Instructions, and send them with a read-only test request (with WebCodex, ask it to list your projects to verify `list_projects`). When the model produces a tool card, click **Run** to test it manually before enabling any automatic execution, insertion, or submission.
+
+> [!TIP]
+> **Best experience**: Once your first tool call succeeds, turning on all three auto options (**Auto Execute**, **Auto Insert**, and **Auto Submit**) gives the smoothest end-to-end multi-turn workflow.
+
 - To update, run `git pull --ff-only`, `pnpm install --frozen-lockfile`, and `pnpm build` in the project directory. Click **Reload** for this extension in `chrome://extensions/` and refresh open chat tabs. If you see `Extension context is invalid`, refresh the chat tab to load the current content script.
 
 ## Known issues

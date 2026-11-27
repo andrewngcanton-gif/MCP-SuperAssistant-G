@@ -123,6 +123,10 @@ Proxy 启动后，在扩展侧栏连接设置中选 **SSE**、**Server URI** 填
 ### 5. 试跑并更新
 
 - 在聊天输入框旁打开 **MCP** 菜单，点 **Insert** 加入 MCP Instructions，再输入一条只读测试请求一起发送（接 WebCodex 时可直接发「列出我的 WebCodex 项目」验证 `list_projects`）。模型生成工具卡片后，先手动点 **Run** 验证，再按需开启自动执行、插入和发送。
+
+> [!TIP]
+> **体验最佳建议**：验证首次工具调用正常后，推荐同时开启 **自动执行**、**自动插入**、**自动发送** 三个自动选项，实现多轮工具调用自动闭环，整体体验最佳。
+
 - 更新时，在项目目录执行 `git pull --ff-only`、`pnpm install --frozen-lockfile` 和 `pnpm build`。回到 `chrome://extensions/` 点本扩展的 **重新加载**，再刷新已打开的聊天页。遇到 `Extension context is invalid` 时，也应刷新聊天页重新注入扩展脚本。
 
 ## 已知问题
