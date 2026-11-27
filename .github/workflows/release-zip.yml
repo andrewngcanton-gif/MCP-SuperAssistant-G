@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build production extension bundle
+        run: pnpm build
+
       - name: Type-check
         run: pnpm type-check
 
@@ -37,9 +40,6 @@ jobs:
 
       - name: Run DOM integration tests in macOS Chrome
         run: pnpm test:dom
-
-      - name: Build production extension bundle
-        run: pnpm build
 
       - name: Determine release label and package cross-platform Chrome zip
         shell: bash
