@@ -66,6 +66,7 @@ test('generateInstructionsCompact stays lean on Gemini and avoids legacy json fe
     const out = generateInstructionsCompact(makeWebCodexTools(), '', false, false);
     assert.ok(out.length < 2400, `expected compact prompt < 2400 chars, got ${out.length}`);
     assert.ok(out.includes('Gemini note: Never use Python'));
+    assert.ok(out.includes('python -c') && out.includes('PowerShell'));
     assert.ok(!out.includes('```json\n'));
     assert.ok(out.includes('listed or tool_lookup tools'));
     assert.ok(out.includes('More webcodex.* (12):'));
@@ -164,6 +165,48 @@ test('formatCompactParamSignature extracts concise required signatures while str
     ),
     '(id | owner+repo, action)',
   );
+  assert.equal(
+    formatCompactParamSignature(
+      JSON.stringify({
+        type: 'object',
+        properties: {
+          project: { type: 'string' },
+          queries: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { pattern: { type: 'string' }, path: { type: 'string' } },
+              required: ['pattern'],
+            },
+          },
+        },
+        required: ['project', 'queries'],
+      }),
+    ),
+    '(project, queries: {pattern}[])',
+  );
+  assert.equal(
+    formatCompactParamSignature(
+      JSON.stringify({
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['a', 'b', 'c', 'd'],
+            },
+          },
+          target: {
+            type: 'object',
+            required: ['path', 'content'],
+          },
+        },
+        required: ['items', 'target'],
+      }),
+    ),
+    '(items: {a, b, c, …}[], target: {path, content})',
+  );
 });
 
 test('generateInstructionsCompact includes inline core signatures to skip Turn-1 schema lookup', () => {
@@ -175,6 +218,19 @@ test('generateInstructionsCompact includes inline core signatures to skip Turn-1
       return {
         ...tool,
         schema: JSON.stringify({ type: 'object', properties: { project: { type: 'string' } }, required: ['project'] }),
+      };
+    }
+    if (tool.name === 'webcodex.search_project_texts') {
+      return {
+        ...tool,
+        schema: JSON.stringify({
+          type: 'object',
+          properties: {
+            project: { type: 'string' },
+            queries: { type: 'array', items: { type: 'object', required: ['pattern'] } },
+          },
+          required: ['project', 'queries'],
+        }),
       };
     }
     if (tool.name === 'webcodex.run_shell') {
@@ -202,6 +258,7 @@ test('generateInstructionsCompact includes inline core signatures to skip Turn-1
   const out = generateInstructionsCompact(tools, '', false, false);
   assert.ok(out.includes('webcodex.list_projects() —'));
   assert.ok(out.includes('webcodex.work_on_project(project) —'));
+  assert.ok(out.includes('webcodex.search_project_texts(project, queries: {pattern}[]) —'));
   assert.ok(out.includes('webcodex.run_shell(project, command) —'));
   assert.ok(out.includes('webcodex.read_files(project, files: object[]) —'));
   assert.ok(out.includes('Call core tools directly;'));

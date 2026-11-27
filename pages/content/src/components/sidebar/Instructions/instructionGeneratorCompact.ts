@@ -57,6 +57,16 @@ export const oneLiner = (d?: string, maxLen = 58): string => {
 
 const INTERNAL_SCHEMA_KEYS = new Set<string>(['_wc']);
 
+const formatObjectRequiredHint = (schemaObj: Record<string, unknown>, fallback: string): string => {
+  const req = Array.isArray(schemaObj.required) ? schemaObj.required : null;
+  if (!req) return fallback;
+  const keys = req.filter(
+    (name): name is string => typeof name === 'string' && !INTERNAL_SCHEMA_KEYS.has(name),
+  );
+  if (keys.length === 0) return fallback;
+  return keys.length <= 3 ? `{${keys.join(', ')}}` : `{${keys.slice(0, 3).join(', ')}, …}`;
+};
+
 const formatCompactTypeHint = (propSchema: unknown): string => {
   if (!propSchema || typeof propSchema !== 'object' || Array.isArray(propSchema)) return '';
   const prop = propSchema as Record<string, unknown>;
@@ -72,14 +82,14 @@ const formatCompactTypeHint = (propSchema: unknown): string => {
     case 'number':
       return 'num';
     case 'object':
-      return 'object';
+      return formatObjectRequiredHint(prop, 'object');
     case 'array': {
       const items = prop.items;
       const itemType =
         items && typeof items === 'object' && !Array.isArray(items)
           ? (items as Record<string, unknown>).type
           : undefined;
-      if (itemType === 'object') return 'object[]';
+      if (itemType === 'object') return `${formatObjectRequiredHint(items as Record<string, unknown>, 'object')}[]`;
       if (itemType === 'string') return 'string[]';
       return 'array';
     }
@@ -388,8 +398,8 @@ export const generateInstructionsCompact = (
   }
 
   const mechanics = `HOW TO CALL
-- Emit a fenced \`\`\`jsonl block as plain text; writing it IS the action. Then STOP and wait for <function_result> (never fabricate or use Python/tool_code).
-- Independent calls may share one message (incrementing integer call_id from 1); dependent calls wait for the next message.
+- Emit a \`\`\`jsonl block as plain text, then STOP for <function_result> (never fabricate or use Python/tool_code).
+- Independent calls share one message (incrementing call_id from 1); dependent calls wait for the next message.
 - Call only listed or tool_lookup tools (plus get_tool_schema / tool_lookup). Pass required params verbatim; ask if missing. Describe actions, not tool names.
 
 ${CALL_FORMAT}
@@ -419,7 +429,7 @@ My actual request starts here:
   return `[SuperAssistant tools — provided by the user's browser extension]
 
 <system>
-You have real tools provided by MCP SuperAssistant. Write a jsonl block as plain text in your reply; the extension runs it locally and returns <function_result>. Never fabricate results.
+You have real tools via MCP SuperAssistant. Print a \`\`\`jsonl block; the extension runs it locally and returns <function_result>. Never fabricate results.
 
 ${guidanceBlock}${mechanicsWithRtk}${custom}${site}
 </system>

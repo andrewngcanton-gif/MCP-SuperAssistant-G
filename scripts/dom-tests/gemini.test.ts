@@ -16,6 +16,7 @@ import {
   streamingObservers,
   streamingLastUpdated,
 } from '@src/render_prescript/src/observer/streamObserver';
+import { checkForUnprocessedFunctionCalls } from '@src/render_prescript/src/observer/mutationObserver';
 import { useUIStore } from '@src/stores/ui.store';
 import { useToolStore } from '@src/stores/tool.store';
 import { useAdapterStore } from '@src/stores/adapter.store';
@@ -616,6 +617,137 @@ async function main() {
     const renderedChips = chipHost?.shadowRoot?.querySelectorAll('.chip') ?? [];
     assert(renderedChips.length === 3, `Expected 3 rendered chips, got ${renderedChips.length}`);
     inputChips.teardown();
+  });
+
+  // Test 10: Multi-call JSONL completes Card 2 (-s1) even when Card 1 already has .function-complete
+  await runTest('Multi-call JSONL renders final chunk of 2nd card even after 1st card already completed', async () => {
+    document.body.innerHTML = '';
+
+    const pre = document.createElement('pre');
+    // Step 1: Call 1 partial -> initial render leaves Card 0 loading
+    pre.textContent = [
+      '{"type":"function_call_start","name":"webcodex.run_shell","call_id":1}',
+      '{"type":"parameter","key":"project","value":"~p1"}',
+    ].join('\n');
+    document.body.appendChild(pre);
+
+    assert(checkForUnprocessedFunctionCalls() === 1, 'Expected initial block to render');
+    const assignedId = pre.getAttribute('data-block-id')!;
+    const card0 = document.querySelector<HTMLElement>(`.function-block[data-block-id="${assignedId}"]`)!;
+    assert(card0.classList.contains('function-loading'), 'Card 0 should start loading');
+
+    // Step 2: Call 1 ends -> transitions Card 0 to .function-complete
+    pre.textContent = [
+      '{"type":"function_call_start","name":"webcodex.run_shell","call_id":1}',
+      '{"type":"parameter","key":"project","value":"~p1"}',
+      '{"type":"parameter","key":"command","value":"echo ok"}',
+      '{"type":"function_call_end","call_id":1}',
+    ].join('\n');
+    assert(renderFunctionCall(pre, { current: false }) === true, 'Call 1 completion render should run');
+    assert(card0.classList.contains('function-complete'), 'Card 0 should now have .function-complete');
+
+    // Step 3: Call 2 starts (incomplete) -> creates Card 1 (-s1) in .function-loading
+    pre.textContent = [
+      '{"type":"function_call_start","name":"webcodex.run_shell","call_id":1}',
+      '{"type":"parameter","key":"project","value":"~p1"}',
+      '{"type":"parameter","key":"command","value":"echo ok"}',
+      '{"type":"function_call_end","call_id":1}',
+      '{"type":"function_call_start","name":"webcodex.read_files","call_id":2}',
+      '{"type":"parameter","key":"project","value":"~p1"}',
+    ].join('\n');
+    assert(renderFunctionCall(pre, { current: false }) === true, 'Call 2 partial render should run');
+    const card1 = document.querySelector<HTMLElement>(`.function-block[data-block-id="${assignedId}-s1"]`)!;
+    assert(card1 !== null, 'Card 1 (-s1) must exist');
+    assert(card1.classList.contains('function-loading'), 'Card 1 should start in function-loading');
+
+    // Step 4: Call 2 final chunk (`items` + `function_call_end`) flips functionInfo.isComplete = true
+    // while Card 0 ALREADY has .function-complete. Card 1 must NOT be skipped!
+    pre.textContent = [
+      '{"type":"function_call_start","name":"webcodex.run_shell","call_id":1}',
+      '{"type":"parameter","key":"project","value":"~p1"}',
+      '{"type":"parameter","key":"command","value":"echo ok"}',
+      '{"type":"function_call_end","call_id":1}',
+      '{"type":"function_call_start","name":"webcodex.read_files","call_id":2}',
+      '{"type":"parameter","key":"project","value":"~p1"}',
+      '{"type":"parameter","key":"items","value":[{"path":"detailed-design.md","start_line":1,"limit":50}]}',
+      '{"type":"function_call_end","call_id":2}',
+    ].join('\n');
+    assert(renderFunctionCall(pre, { current: false }) === true, 'Call 2 completion render must NOT be skipped');
+    assert(!card1.classList.contains('function-loading'), 'Card 1 must lose function-loading');
+    assert(card1.classList.contains('function-complete'), 'Card 1 must gain function-complete');
+    assert(card1.querySelector('.spinner') === null, 'Card 1 .spinner must be removed');
+    assert(card1.querySelector('.execute-button') !== null, 'Card 1 must render Run button');
+    assert(card1.textContent?.includes('detailed-design.md'), 'Card 1 must include final items parameter');
+  });
+
+  // Test 11: Structured MCP 400 / JSON-RPC errors mentioning `timeout_secs` stay verbatim while real timeouts stay friendly
+  await runTest('Structured MCP 400 error containing timeout_secs is preserved verbatim while plain timeout shows friendly message', async () => {
+    document.body.innerHTML = '';
+    localStorage.clear();
+    (window as any).__mcpAutomationSettings = {
+      autoExecute: false,
+      autoInsert: false,
+      autoSubmit: false,
+      autoDiscovery: true,
+      autoExecuteDelay: 0,
+    };
+
+    const preA = document.createElement('pre');
+    preA.setAttribute('data-block-id', 'err400-a');
+    preA.textContent = [
+      '{"type":"function_call_start","name":"webcodex.search_project_texts","call_id":101}',
+      '{"type":"parameter","key":"project","value":"~p1"}',
+      '{"type":"parameter","key":"queries","value":["bad"]}',
+      '{"type":"function_call_end","call_id":101}',
+    ].join('\n');
+    document.body.appendChild(preA);
+    assert(renderFunctionCall(preA, { current: false }) === true, 'preA should render');
+
+    const schemaErr =
+      'MCP error 400: Streamable HTTP error: Error POSTing to endpoint: {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"invalid arguments for tool \'search_project_texts\': queries[0]: invalid value or type"}} Expected input_schema: {"timeout_secs":{"type":"integer"}}';
+    (window as any).mcpClient = {
+      isReady: () => true,
+      callTool: async () => {
+        throw new Error(schemaErr);
+      },
+    };
+
+    const runBtnA = document.querySelector<HTMLButtonElement>('.function-block[data-block-id="err400-a"] .execute-button');
+    assert(runBtnA !== null, 'Card A must render Run button');
+    runBtnA!.click();
+    await sleep(60);
+
+    const errTextA = document.querySelector('.function-block[data-block-id="err400-a"] .function-result-error')?.textContent || '';
+    assert(errTextA.includes('MCP error 400'), `Expected MCP error 400 preserved, got: ${errTextA}`);
+    assert(errTextA.includes('invalid arguments'), `Expected invalid arguments preserved, got: ${errTextA}`);
+    assert(errTextA.includes('timeout_secs'), `Expected timeout_secs preserved, got: ${errTextA}`);
+    assert(!errTextA.includes('Request timed out. Please try again.'), `Structured 400 must not be rewritten as timeout: ${errTextA}`);
+
+    const preB = document.createElement('pre');
+    preB.setAttribute('data-block-id', 'err400-b');
+    preB.textContent = [
+      '{"type":"function_call_start","name":"webcodex.run_shell","call_id":102}',
+      '{"type":"parameter","key":"project","value":"~p1"}',
+      '{"type":"parameter","key":"command","value":"echo ok"}',
+      '{"type":"function_call_end","call_id":102}',
+    ].join('\n');
+    document.body.appendChild(preB);
+    assert(renderFunctionCall(preB, { current: false }) === true, 'preB should render');
+
+    (window as any).mcpClient = {
+      isReady: () => true,
+      callTool: async () => {
+        throw new Error('Request timeout after 30000ms');
+      },
+    };
+
+    const runBtnB = document.querySelector<HTMLButtonElement>('.function-block[data-block-id="err400-b"] .execute-button');
+    assert(runBtnB !== null, 'Card B must render Run button');
+    runBtnB!.click();
+    await sleep(60);
+
+    const errTextB = document.querySelector('.function-block[data-block-id="err400-b"] .function-result-error')?.textContent || '';
+    assert(errTextB.includes('Request timed out. Please try again.'), `Plain timeout must still map to friendly message, got: ${errTextB}`);
   });
 
   window.__testResults = results;

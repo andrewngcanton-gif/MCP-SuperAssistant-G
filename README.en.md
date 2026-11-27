@@ -31,10 +31,11 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## Changelog
 
-### v0.1.7 (2026-11-27)
+### v0.1.8 (2026-11-27)
 
-- **Fixed Gemini's input cursor shifting or disappearing after inserting multiple tool results.** Switched the chip bar to a single-row horizontally scrollable strip and mounted it in the vertical composer wrapper above Gemini's `.text-input-field` so inserting 3+ tool results no longer crowds or hides the editor cursor.
-- **Prevented 400 invalid-argument errors on `work_on_project` first calls.** Surfaced conditional required-parameter selectors (such as `project | client_id+path | session_id` and `oneOf`/`anyOf` schemas) in compact tool signatures so models do not omit the project source.
+- **Fixed trailing cards in multi-call tool blocks freezing on a spinner and never executing.** When the first call in a multi-call JSONL block finishes before subsequent calls finish streaming, later cards are no longer skipped on their closing chunk—they finish rendering, auto-execute, and return with the batch instead of holding auto-submit for up to 60 seconds or dropping results.
+- **Preserved structured MCP 400 / JSON-RPC error details and schemas.** Validation errors whose returned `Expected input_schema` mentions words like `timeout_secs` or `connection` are no longer overwritten as generic timeout or connection-lost messages, allowing models to self-correct immediately.
+- **Surfaced required keys inside object and object-array parameters, plus Gemini `python -c` shell guidance.** Compact core signatures now display required inner keys (such as `queries: {pattern}[]` and `items: {path}[]`) to prevent first-turn argument guesswork, and Gemini's compact prompt steers complex shell tasks toward `python -c` to avoid PowerShell `$` and pipe escaping corruption.
 
 > For earlier releases, see the [full changelog (CHANGELOG.en.md)](CHANGELOG.en.md).
 

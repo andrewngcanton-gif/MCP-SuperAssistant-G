@@ -53,6 +53,17 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config scripts/crewdispatch-c
 
 以下记录各版本的具体实现细节与故障根因分析。面向用户的简要更新说明见 [README.md](README.md) 与 [CHANGELOG.md](CHANGELOG.md)。
 
+### v0.1.8（2026-11-27）
+
+- **修复多调用 JSONL 代码块中后续卡片卡死在 `.function-loading`（`functionBlock.ts`、`scripts/dom-tests/gemini.test.ts`）。**
+  - 根因：`renderFunctionCall()` 的早退跳过条件仅检查第 0 张卡（`.function-block[data-block-id="${blockId}"]`）是否带有 `.function-complete` 以及整体 `functionInfo.isComplete`。在多调用 JSONL 块中，第 1 个调用先闭合时第 0 张卡即获得 `.function-complete`；随后第 2 个调用分段渲染为 `${blockId}-s1` 且初始处于 `.function-loading`，当第 2 个调用最终参数与 `function_call_end` 到达、`functionInfo.isComplete` 变为 `true` 时，早退分支误判整块已完成并 `return false`，导致第 2 张卡永久冻结在加载态、没有运行按钮且无法自动执行，同时拖住 `automationService` 自动提交最长 60 秒并漏传该卡结果。
+  - 修复：在 `renderFunctionCall()` 早退前增加同 block 加载卡与分段数量检查（`!hasLoadingCard && renderedCardCount >= expectedCardCount`，基于 `${blockId}` 与 `${blockId}-s*` 以及 `splitJSONFunctionSegments()`），确保仍有子卡片加载中或尚未渲染全部分段时绝不跳过收尾渲染，并在 `scripts/dom-tests/gemini.test.ts` 新增回归用例。
+- **保留结构化 MCP 400 / JSON-RPC 错误原文与输入 Schema（`components.ts`、`functionHistory.ts`、`scripts/dom-tests/gemini.test.ts`）。**
+  - 根因：`components.ts` 与 `functionHistory.ts` 的异常捕获分支此前仅用宽松的 `.includes('timeout')` / `.includes('connection')` 匹配错误字符串，会把服务端返回中带有 `timeout_secs`（如 `search_project_texts` 的 `Expected input_schema`）或 `connection` 字段说明的 `MCP error 400` / JSON-RPC `-32602` 错误改写成 `Request timed out. Please try again.`，掩盖真实参数要求。
+  - 修复：新增 `isStructuredToolError` 判断（匹配 `/MCP error \d{3}|"jsonrpc"|Expected input_schema|invalid arguments/i`），对结构化工具报错直接保留原始错误消息与 Schema，仅对普通超时/断连错误走友好提示映射，并在 `scripts/dom-tests/gemini.test.ts` 补充 DOM 回归测试。
+- **Compact 签名透出对象/对象数组内部必填键，并引导 Gemini 使用 `python -c`（`instructionGeneratorCompact.ts`、`website_specific_instruction/gemini.ts`、`instructionGeneratorCompact.test.ts`）。**
+  - 改进：在 `formatCompactTypeHint()` 中新增 `formatObjectRequiredHint()`，对 `object` 及 `items.type === 'object'` 的数组读取内部 `required` 键名（剔除 `_wc`，最多展示 3 个并用 `…` 截断），输出诸如 `queries: {pattern}[]`、`items: {path}[]` 与 `{path, content}` 的紧致提示；同时在 `geminiCompactInstructions` 中补充“复杂脚本优先用 `python -c`，减少 `$` 与管道繁杂的 PowerShell 单行命令”引导，并将 `instructionGeneratorCompact.ts` 的其余自然语言进一步收紧，确保 Gemini 下 17 个 WebCodex 工具精简提示仍低于 2,400 字符预算（已在 `instructionGeneratorCompact.test.ts` 覆盖）。
+
 ### v0.1.7（2026-11-27）
 
 - **修复 Gemini 多结果芯片导致输入区错位/光标消失，以及芯片栏单行横向滚动（`gemini.adapter.ts`、`input-chips.ts`、`scripts/dom-tests/gemini.test.ts`）。**

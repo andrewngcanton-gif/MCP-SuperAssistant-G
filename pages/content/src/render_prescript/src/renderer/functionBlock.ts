@@ -1658,14 +1658,23 @@ export const renderFunctionCall = (block: HTMLPreElement, isProcessingRef: { cur
   }
 
   const existingFunctionBlock = document.querySelector(`.function-block[data-block-id="${blockId}"]`);
-  // AND with the whole-block completion (now count-based) so a multi-call block whose
-  // FIRST card completed but whose later cards are still streaming is not frozen.
-  // For single-call blocks this is unchanged: the completing render still runs (the
-  // div is not yet .function-complete at that point), later renders skip.
+  // Skip re-rendering only once Card 0 is complete AND no sibling card (-s*) is still loading
+  // AND every JSON segment already has a rendered card. Otherwise the closing chunk of Card 2/3
+  // would be dropped as soon as functionInfo.isComplete flips true because Card 0 completed earlier.
+  const hasLoadingCard = !!document.querySelector(
+    `.function-block.function-loading[data-block-id="${blockId}"], .function-block.function-loading[data-block-id^="${blockId}-s"]`,
+  );
+  const renderedCardCount = document.querySelectorAll(
+    `.function-block[data-block-id="${blockId}"], .function-block[data-block-id^="${blockId}-s"]`,
+  ).length;
+  const expectedCardCount =
+    functionInfo.detectedBlockType === 'json' ? splitJSONFunctionSegments(getBlockText(block)).length : 1;
   if (
     existingFunctionBlock &&
     existingFunctionBlock.classList.contains('function-complete') &&
-    functionInfo.isComplete
+    functionInfo.isComplete &&
+    !hasLoadingCard &&
+    renderedCardCount >= expectedCardCount
   ) {
     if (CONFIG.debug) logger.debug(`Skipping render for completed block ${blockId}`);
     return false;

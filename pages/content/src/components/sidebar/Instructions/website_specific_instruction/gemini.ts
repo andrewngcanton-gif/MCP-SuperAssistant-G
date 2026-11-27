@@ -31,4 +31,5 @@ Example of a properly formatted tool call for Gemini:
 // Compressed schema notation documentation will be added after this point
 
 // Minimal Gemini-specific note for compact mode (avoids duplicating call format/rules)
-export const geminiCompactInstructions = "Gemini note: Never use Python, tool_code, or print(...) for these tools; output raw ```jsonl blocks directly.";
+export const geminiCompactInstructions =
+  "Gemini note: Never use Python/tool_code/print(...) to call tools; emit raw ```jsonl. For complex shell scripts, prefer python -c over long $-heavy PowerShell one-liners.";

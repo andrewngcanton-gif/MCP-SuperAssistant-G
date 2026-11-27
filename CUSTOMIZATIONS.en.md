@@ -53,6 +53,17 @@ After changing the toggle, re-run the generator and restart the proxy; the runni
 
 Detailed implementation-level notes for each release and fix. User-facing summaries live in [README.en.md](README.en.md) and [CHANGELOG.en.md](CHANGELOG.en.md).
 
+### v0.1.8 (2026-11-27)
+
+- **Fixed trailing cards in multi-call JSONL blocks freezing in `.function-loading` (`functionBlock.ts`, `scripts/dom-tests/gemini.test.ts`).**
+  - Root cause: `renderFunctionCall()`'s skip guard checked only whether Card 0 (`.function-block[data-block-id="${blockId}"]`) already carried `.function-complete` alongside `functionInfo.isComplete`. In a multi-call JSONL block, Card 0 receives `.function-complete` as soon as the first call closes; once Call 2 begins streaming into `${blockId}-s1` in `.function-loading` and then receives its final arguments + `function_call_end` (flipping `functionInfo.isComplete` back to `true`), the guard returned `false` and dropped the closing render for Card 2, leaving it permanently spinning without a `Run` button, blocking `automationService` auto-submit for up to 60 seconds, and omitting its result from the reply.
+  - Fix: Added `!hasLoadingCard && renderedCardCount >= expectedCardCount` to the skip guard (checking both `${blockId}` and `${blockId}-s*` cards against `splitJSONFunctionSegments()`), plus a regression test in `scripts/dom-tests/gemini.test.ts`.
+- **Preserved structured MCP 400 / JSON-RPC errors and `Expected input_schema` (`components.ts`, `functionHistory.ts`, `scripts/dom-tests/gemini.test.ts`).**
+  - Root cause: The catch blocks in `components.ts` and `functionHistory.ts` unconditionally matched substring `.includes('timeout')` / `.includes('connection')`, rewriting structured HTTP 400 / JSON-RPC `-32602` validation errors whose returned `Expected input_schema` contained `timeout_secs` (e.g., `search_project_texts`) into `Request timed out. Please try again.`.
+  - Fix: Guarded the friendly-message rewrite behind `!isStructuredToolError` (`/MCP error \d{3}|"jsonrpc"|Expected input_schema|invalid arguments/i`), keeping structured tool error details intact while preserving friendly mapping for actual timeouts/disconnects; covered in `scripts/dom-tests/gemini.test.ts`.
+- **Surfaced required keys for objects/object-arrays in Compact signatures and added Gemini `python -c` shell guidance (`instructionGeneratorCompact.ts`, `website_specific_instruction/gemini.ts`, `instructionGeneratorCompact.test.ts`).**
+  - Improvement: Added `formatObjectRequiredHint()` inside `formatCompactTypeHint()` to read required inner keys (up to 3 keys, excluding `_wc`) on `object` parameters and `items.type === 'object'` arrays, producing hints like `queries: {pattern}[]`, `items: {path}[]`, and `{path, content}`. Updated `geminiCompactInstructions` to prefer `python -c` over `$`-heavy/piped PowerShell one-liners and tightened `instructionGeneratorCompact.ts` copy so a 17-tool WebCodex prompt on Gemini still stays under the 2,400-char test budget (covered in `instructionGeneratorCompact.test.ts`).
+
 ### v0.1.7 (2026-11-27)
 
 - **Gemini multi-chip composer layout fix and single-row chip scrolling (`gemini.adapter.ts`, `input-chips.ts`, `scripts/dom-tests/gemini.test.ts`).**

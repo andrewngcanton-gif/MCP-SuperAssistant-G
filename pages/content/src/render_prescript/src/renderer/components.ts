@@ -551,14 +551,19 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
 
         // Enhanced error handling for connection issues
         let errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
+        const isStructuredToolError = /MCP error \d{3}|"jsonrpc"|Expected input_schema|invalid arguments/i.test(
+          errorMessage,
+        );
 
         // Check for connection-related errors and provide better user feedback
-        if (errorMessage.includes('not connected') || errorMessage.includes('connection')) {
-          errorMessage = 'Connection lost. Please check your MCP server connection.';
-        } else if (errorMessage.includes('timeout')) {
-          errorMessage = 'Request timed out. Please try again.';
-        } else if (errorMessage.includes('server unavailable') || errorMessage.includes('SERVER_UNAVAILABLE')) {
-          errorMessage = 'MCP server is unavailable. Please check the server status.';
+        if (!isStructuredToolError) {
+          if (errorMessage.includes('not connected') || errorMessage.includes('connection')) {
+            errorMessage = 'Connection lost. Please check your MCP server connection.';
+          } else if (errorMessage.includes('timeout')) {
+            errorMessage = 'Request timed out. Please try again.';
+          } else if (errorMessage.includes('server unavailable') || errorMessage.includes('SERVER_UNAVAILABLE')) {
+            errorMessage = 'MCP server is unavailable. Please check the server status.';
+          }
         }
 
         const isContextInvalid = isExtensionContextInvalidError(errorMessage);

@@ -29,7 +29,7 @@ const manifest = {
     },
   },
   version: packageJson.version,
-  version_name: 'v0.1.7',
+  version_name: 'v0.1.8',
   description: 'MCP SuperAssistant G',
   host_permissions: [
     '*://*.perplexity.ai/*',
