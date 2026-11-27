@@ -53,6 +53,20 @@ After changing the toggle, re-run the generator and restart the proxy; the runni
 
 Detailed implementation-level notes for each release and fix. User-facing summaries live in [README.en.md](README.en.md) and [CHANGELOG.en.md](CHANGELOG.en.md).
 
+### v0.2.0 (2026-11-27)
+
+- **macOS `Cmd+Enter` submit & turn-provenance gate support:**
+  - `pages/content/src/services/input-chips.ts`: extended `isChipSubmitEnter` and `onKeydown` to support `Cmd+Enter` (`metaKey`) while preserving existing Windows `Ctrl+Enter` and plain `Enter` paths.
+  - `pages/content/src/render_prescript/src/provenance/aistudioTurnGate.ts`: updated `onKeyDown` to accept single-modifier `ctrlKey || metaKey` (rejecting dual-modifier chords).
+  - `pages/content/src/render_prescript/src/provenance/aistudioAppsTurnGate.ts`: updated `onWindowKeydown` with `hasPrimaryModifier = (e.ctrlKey && !e.metaKey) || (e.metaKey && !e.ctrlKey)`.
+  - `pages/content/src/plugins/adapters/aistudio-apps.ts`: updated timeout fallback synthetic keydown dispatch using `isMac` (`ctrlKey: !isMac, metaKey: isMac`).
+  - `scripts/dom-tests/aistudio.test.ts` & `scripts/dom-tests/aistudio-apps.test.ts`: added `Cmd+Enter` coverage in Test 6 and Test 1 respectively.
+- **macOS CI verification & automated GitHub Release packaging:**
+  - Added `.github/workflows/release-zip.yml` running on `macos-latest` in clean-checkout order (`pnpm build` before `pnpm type-check` so generated `@extension/i18n/lib/i18n.js` exists, followed by `pnpm test:unit` and `pnpm test:dom`), uploading `mcp-superassistant-g-${LABEL}-chrome.zip` and publishing it on `refs/tags/v*`.
+  - Updated `.nvmrc` to `22` and `package.json` `engines.node` to `>=22.13.0` to satisfy `eslint-visitor-keys@5.0.1`.
+- **OS-specific bilingual WebCodex guides:**
+  - Added `WEBCODEX_MACOS.en.md` (with top-level one-click `~/start-mcp-webcodex.sh` launcher script) and `WEBCODEX_WINDOWS.en.md`, linking both from the shared WebCodex section in `README.en.md` (`v0.5.0` on Windows, `v0.5.1` on macOS).
+
 ### v0.1.9 (2026-11-27)
 
 - **Fixed `Remind` + user prompt collapsing into an unexpandable empty "Tool result" and Markdown `<hr>` splitting (`functionResult.ts`, `functionResultObserver.ts`, `scripts/dom-tests/gemini.test.ts`).**

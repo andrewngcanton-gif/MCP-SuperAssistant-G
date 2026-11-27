@@ -29,7 +29,7 @@ const manifest = {
     },
   },
   version: packageJson.version,
-  version_name: 'v0.1.9',
+  version_name: 'v0.2.0',
   description: 'MCP SuperAssistant G',
   host_permissions: [
     '*://*.perplexity.ai/*',
@@ -52,7 +52,6 @@ const manifest = {
     '*://*.chat.z.ai/*',
     '*://*.chat.qwen.ai/*',
     '*://*.claude.ai/*',
-
   ],
 
   permissions: ['storage', 'clipboardWrite', 'tabs', 'scripting', 'activeTab', 'alarms'],
@@ -183,7 +182,6 @@ const manifest = {
       js: ['content/index.iife.js'],
       run_at: 'document_idle',
     },
-
   ],
   // devtools_page: 'devtools/index.html',
   web_accessible_resources: [

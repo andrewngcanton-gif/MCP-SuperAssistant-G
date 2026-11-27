@@ -31,11 +31,11 @@
 
 ## 更新记录
 
-### v0.1.9（2026-11-27）
+### v0.2.0（2026-11-27）
 
-- **修复 Gemini 与 AI Studio 发送 `规则提醒（Remind）` 合并提示词后误折叠为空白“工具结果”且无法展开。** 发送提醒消息时，你的提问原文会保留在折叠条上方，下方折叠条正确显示为 **MCP提醒** 并可正常点击展开查看全文；同时收紧工具结果识别，正文里顺带提到 `<function_result>` 不再被误折叠。
-- **修复 AI Studio Build / Apps 首页按钮错位与工作区结果不折叠。** 将 `/app/apps` 首页的 MCP 按钮移至与 `+` 号同一行右侧对齐，并支持 `/apps/<id>` 左侧对话气泡自动折叠工具结果与提醒上下文。
-- **在 Gemini 的 `规则提醒` 中补充 `python -c` 引导。** 长对话中段点击 **规则提醒** 后也会继续提醒模型用简短 `python -c` 替代容易出错的长 PowerShell 脚本。
+- **新增 macOS `Cmd+Enter` 发送与轮次校验支持。** 适配标签芯片输入框、AI Studio 轮次门控以及 AI Studio Build / Apps 的自动回传按键，Windows 下的 `Ctrl+Enter` 与回车行为保持不变，并已在 macOS M1 Chrome + WebCodex `v0.5.1` 环境实测通过。
+- **新增 macOS CI 验证与自动跨平台打包发布工作流。** 升级至 Node 22 LTS（`>=22.13.0`），通过 GitHub Actions `macos-latest` 自动执行构建、类型检查、单元测试与 DOM 集成测试，并在打 tag 时自动打包上传 Chrome 扩展压缩包到 GitHub Releases。
+- **拆分并完善 WebCodex 独立双语使用指南。** 将 README 保留为通用概述，并拆分出面向 macOS（`v0.5.1`，含顶部一键启动脚本）与 Windows（`v0.5.0`）的独立指南页面（[WEBCODEX_MACOS.md](WEBCODEX_MACOS.md) / [WEBCODEX_WINDOWS.md](WEBCODEX_WINDOWS.md)）。
 
 > 更早版本的更新说明见 [完整更新记录（CHANGELOG.md）](CHANGELOG.md)。
 

@@ -31,11 +31,11 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## Changelog
 
-### v0.1.9 (2026-11-27)
+### v0.2.0 (2026-11-27)
 
-- **Fixed `Remind` messages merged with a user prompt collapsing as an unexpandable empty "Tool result" on Gemini and AI Studio.** Your own prompt now stays visible above the fold while the collapsible card displays as **MCP Reminder** and expands cleanly; tool-result detection now requires a full paired `<function_result>...</function_result>` block so prose mentioning the tag is not collapsed.
-- **Fixed AI Studio Build / Apps landing MCP button placement and workspace result collapsing.** Placed the MCP button inline next to the `+` menu inside `.actions-container` on `/app/apps`, and added collapsing support for user tool-result and reminder bubbles in `/apps/<id>`.
-- **Reinforced `python -c` guidance in Gemini's `Remind` snippet.** Long-chat reminders on Gemini now also steer `run_shell` edits toward short `python -c` scripts while staying under the 750-char budget.
+- **Added macOS `Cmd+Enter` submit and turn-gate support.** Updated chip input, AI Studio turn provenance gates, and AI Studio Build / Apps auto-submit key dispatch to accept `Cmd+Enter` on macOS while keeping Windows `Ctrl+Enter` and plain `Enter` behavior unchanged; verified live on macOS M1 Chrome with WebCodex `v0.5.1`.
+- **Added macOS CI verification and automated GitHub Release zip packaging.** Upgraded CI baseline to Node 22 LTS (`>=22.13.0`) with a `macos-latest` workflow running clean build, type-check, unit tests, and DOM integration tests, automatically publishing the Chrome extension `.zip` to GitHub Releases on version tags.
+- **Split WebCodex setup into dedicated OS-specific guides.** Kept the shared overview in the main README and moved setup details to [WEBCODEX_MACOS.en.md](WEBCODEX_MACOS.en.md) (`v0.5.1`, including a top-level one-click launcher script) and [WEBCODEX_WINDOWS.en.md](WEBCODEX_WINDOWS.en.md) (`v0.5.0`).
 
 > For earlier releases, see the [full changelog (CHANGELOG.en.md)](CHANGELOG.en.md).
 

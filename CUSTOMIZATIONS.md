@@ -53,6 +53,20 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config scripts/crewdispatch-c
 
 以下记录各版本的具体实现细节与故障根因分析。面向用户的简要更新说明见 [README.md](README.md) 与 [CHANGELOG.md](CHANGELOG.md)。
 
+### v0.2.0（2026-11-27）
+
+- **macOS `Cmd+Enter` 键盘路径与轮次归属门控兼容：**
+  - `pages/content/src/services/input-chips.ts`：`isChipSubmitEnter` 与 `onKeydown` 新增 `metaKey`（`Cmd+Enter`）支持，同时保持 Windows 下的 `Ctrl+Enter` 与普通 `Enter` 路径不变。
+  - `pages/content/src/render_prescript/src/provenance/aistudioTurnGate.ts`：`onKeyDown` 接受单修饰键 `ctrlKey || metaKey`（并排除双修饰键同时按下）。
+  - `pages/content/src/render_prescript/src/provenance/aistudioAppsTurnGate.ts`：`onWindowKeydown` 校验单修饰键 `hasPrimaryModifier = (e.ctrlKey && !e.metaKey) || (e.metaKey && !e.ctrlKey)`。
+  - `pages/content/src/plugins/adapters/aistudio-apps.ts`：超时回退的合成键盘事件改为按 `isMac` 分发（`ctrlKey: !isMac, metaKey: isMac`）。
+  - `scripts/dom-tests/aistudio.test.ts` 与 `scripts/dom-tests/aistudio-apps.test.ts`：补充 `Cmd+Enter` 轮次门控与超时回退派发用例。
+- **macOS CI 与自动化构建发布：**
+  - 新增 `.github/workflows/release-zip.yml`，在 `macos-latest` 上按 `pnpm build` -> `pnpm type-check` -> `pnpm test:unit` -> `pnpm test:dom` 顺序验证（保证干净检出时先生成 `@extension/i18n/lib/i18n.js`），并在推送 `v*` tag 时自动创建 Release 并上传 `mcp-superassistant-g-${LABEL}-chrome.zip`。
+  - `.nvmrc` 设为 `22` 并将根 `package.json` `engines.node` 提升至 `>=22.13.0`（适配 `eslint-visitor-keys@5.0.1`）。
+- **WebCodex 双语 OS 独立指南拆分：**
+  - 新增 `WEBCODEX_MACOS.md`（内置顶部一键 `~/start-mcp-webcodex.sh` 启动脚本）与 `WEBCODEX_WINDOWS.md`，并在 `README.md` 保留通用说明与文档链接（Windows 保持 `v0.5.0`，macOS 保持 `v0.5.1`）。
+
 ### v0.1.9（2026-11-27）
 
 - **修复 `Remind` 合并提示词误判为空白“工具结果”与 `<hr>` 分割失效（`functionResult.ts`、`functionResultObserver.ts`、`scripts/dom-tests/gemini.test.ts`）。**
