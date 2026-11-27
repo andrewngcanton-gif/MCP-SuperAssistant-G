@@ -15,6 +15,7 @@ import {
   isAistudioSendButtonEnabled,
 } from '../../render_prescript/src/provenance/aistudioTurnGate';
 import {
+  findAistudioAppsButtonInsertionPoint,
   findAistudioAppsInput,
   getAistudioAppsChipAnchors,
   insertTextToAistudioAppsInput,
@@ -1156,6 +1157,14 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
   private findButtonInsertionPoint(): { container: Element; insertAfter: Element | null } | null {
     this.context.logger.debug('Finding button insertion point for MCP popover');
 
+    if (isAistudioAppsRoute()) {
+      const appsInsertion = findAistudioAppsButtonInsertionPoint();
+      if (appsInsertion) {
+        this.context.logger.debug('Found AI Studio Apps landing .actions-container insertion point');
+        return appsInsertion;
+      }
+    }
+
     // Jan 2026 STRATEGY: Look for .buttons-row > .button-wrapper structure first
     const buttonsRow = document.querySelector('.buttons-row');
     if (buttonsRow) {
@@ -1305,6 +1314,10 @@ export class AIStudioAdapter extends BaseAdapterPlugin {
 
       // Insert at appropriate location
       const { container, insertAfter } = insertionPoint;
+      if (container.matches('.actions-container')) {
+        buttonWrapper.style.display = 'inline-flex';
+        buttonWrapper.style.alignItems = 'center';
+      }
       if (insertAfter && insertAfter.parentNode === container) {
         container.insertBefore(buttonWrapper, insertAfter.nextSibling);
         this.context.logger.debug('Inserted MCP button wrapper after specified element');

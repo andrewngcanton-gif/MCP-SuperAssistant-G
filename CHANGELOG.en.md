@@ -10,6 +10,12 @@
 
 User-facing release history for **MCP SuperAssistant G**.
 
+### v0.1.9 (2026-11-27)
+
+- **Fixed `Remind` messages merged with a user prompt collapsing as an unexpandable empty "Tool result" on Gemini and AI Studio.** Your own prompt now stays visible above the fold while the collapsible card displays as **MCP Reminder** and expands cleanly; tool-result detection now requires a full paired `<function_result>...</function_result>` block so prose mentioning the tag is not collapsed.
+- **Fixed AI Studio Build / Apps landing MCP button placement and workspace result collapsing.** Placed the MCP button inline next to the `+` menu inside `.actions-container` on `/app/apps`, and added collapsing support for user tool-result and reminder bubbles in `/apps/<id>`.
+- **Reinforced `python -c` guidance in Gemini's `Remind` snippet.** Long-chat reminders on Gemini now also steer `run_shell` edits toward short `python -c` scripts while staying under the 750-char budget.
+
 ### v0.1.8 (2026-11-27)
 
 - **Fixed trailing cards in multi-call tool blocks freezing on a spinner and never executing.** When the first call in a multi-call JSONL block finishes before subsequent calls finish streaming, later cards are no longer skipped on their closing chunk—they finish rendering, auto-execute, and return with the batch instead of holding auto-submit for up to 60 seconds or dropping results.

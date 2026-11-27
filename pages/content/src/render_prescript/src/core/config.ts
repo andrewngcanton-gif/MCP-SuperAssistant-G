@@ -71,8 +71,8 @@ export const WEBSITE_CONFIGS: Array<{
         // <div _ngcontent-ng-c1514118342="" msheightchanged="" class="turn-content">
         // <div _ngcontent-ng-c1514118342="" class="virtual-scroll-container user-prompt-container" data-turn-role="User">
         // <ms-text-chunk _ngcontent-ng-c66683564="" _nghost-ng-c3631226313="" class="ng-star-inserted">
-        // Scoped to the user turn: bare 'ms-text-chunk' also matches assistant chunks.
-        function_result_selector: ['[data-turn-role="User"] ms-text-chunk'],
+        // Scoped to user turns across Playground and Build/Apps (`ms-code-assistant-chat`).
+        function_result_selector: ['[data-turn-role="User"] ms-text-chunk', 'ms-code-assistant-chat .bubble.user'],
       },
     },
     {

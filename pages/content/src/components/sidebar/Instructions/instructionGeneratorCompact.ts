@@ -345,9 +345,10 @@ export const generateInstructionReminder = (
   const coreNames = core.map(t => t.name).join(', ');
   const deferredCount = deferredGroups.reduce((sum, g) => sum + g.names.length, 0);
   const wcFiles = resolveWebCodexFileTools(tools);
+  const isGemini = getCurrentHost().includes('gemini');
   const wcEditHint = wcFiles
     ? wcFiles.runShell
-      ? `\nWebCodex edits: skip ${wcFiles.editProjectFiles} for multiline/quote-heavy edits or errors; use ${wcFiles.runShell} with a short script.`
+      ? `\nWebCodex edits: skip ${wcFiles.editProjectFiles} for multiline/quote-heavy edits or errors; use ${wcFiles.runShell} with a short ${isGemini ? 'python -c ' : ''}script.`
       : `\nWebCodex edits: skip ${wcFiles.editProjectFiles} for multiline/quote-heavy edits or errors; stop and report.`
     : '';
   const wcRtk = useRtkWithWebCodex ? resolveWebCodexRtkTools(tools) : null;

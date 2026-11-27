@@ -83,6 +83,17 @@ test('generateInstructionReminder is ultra-compact and includes core tools and W
   assert.ok(out.includes('webcodex.list_projects'));
   assert.ok(out.includes('(+12 more via tool_lookup)'));
   assert.ok(out.includes('webcodex.run_shell'));
+  assert.ok(!out.includes('python -c script'));
+
+  const prevLocation = (globalThis as any).location;
+  (globalThis as any).location = { hostname: 'gemini.google.com' };
+  try {
+    const geminiOut = generateInstructionReminder(makeWebCodexTools(), false);
+    assert.ok(geminiOut.includes('python -c script'), 'Gemini reminder should reinforce python -c');
+    assert.ok(geminiOut.length < 750, `expected Gemini reminder < 750 chars, got ${geminiOut.length}`);
+  } finally {
+    (globalThis as any).location = prevLocation;
+  }
 });
 
 test('generateInstructionReminder handles empty tools and optional RTK hint', () => {

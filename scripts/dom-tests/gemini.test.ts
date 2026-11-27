@@ -22,6 +22,7 @@ import { useToolStore } from '@src/stores/tool.store';
 import { useAdapterStore } from '@src/stores/adapter.store';
 import { generateInstructionReminder } from '@src/components/sidebar/Instructions/instructionGeneratorCompact';
 import { renderFunctionCall, renderedFunctionBlocks, processedElements } from '@src/render_prescript/src/renderer/functionBlock';
+import { renderFunctionResult } from '@src/render_prescript/src/renderer/functionResult';
 import { initializeGeminiTurnGate, resetGeminiTurnGateForTests } from '@src/render_prescript/src/provenance/geminiTurnGate';
 import { getPreviousExecution } from '@src/render_prescript/src/mcpexecute/storage';
 
@@ -748,6 +749,60 @@ async function main() {
 
     const errTextB = document.querySelector('.function-block[data-block-id="err400-b"] .function-result-error')?.textContent || '';
     assert(errTextB.includes('Request timed out. Please try again.'), `Plain timeout must still map to friendly message, got: ${errTextB}`);
+  });
+
+  // Test 12: Remind + user prompt folds as expandable MCP Reminder (not empty Tool result), both with `---` and `<hr>`
+  await runTest('Remind merged with user prompt folds as expandable MCP Reminder rather than empty Tool result', async () => {
+    document.body.innerHTML = '';
+
+    const reminderBody =
+      '[MCP SuperAssistant reminder]\nEmit raw ```jsonl call(s), then STOP for <function_result> (never fabricate):\nCore: webcodex.list_projects.';
+
+    // Case A: Literal `\n\n---\n` separator preserved
+    const elA = document.createElement('div');
+    elA.className = 'query-content';
+    elA.textContent = `Check why auth failed\n\n---\n${reminderBody}`;
+    document.body.appendChild(elA);
+
+    assert(renderFunctionResult(elA, { current: false }) === true, 'Remind + prompt (---) must render as system/reminder box');
+    assert(elA.querySelector('.function-result-container') === null, 'Remind must NOT render as Tool result');
+    const userTextA = elA.querySelector('.system-message-user-text')?.textContent?.trim();
+    assert(userTextA === 'Check why auth failed', `Expected user prompt preserved above pill, got: ${userTextA}`);
+    const titleA = elA.querySelector('.system-message-container .function-name-text')?.textContent?.trim() || '';
+    assert(
+      titleA === 'MCP Reminder' || titleA === 'MCP提醒',
+      `Expected MCP Reminder header, got: ${titleA}`,
+    );
+    const btnA = elA.querySelector<HTMLButtonElement>('.system-message-container .expand-button');
+    assert(btnA !== null, 'Expected expand button on Remind pill');
+    btnA!.click();
+    assert(elA.querySelector('.system-message-container')?.classList.contains('expanded'), 'Clicking expand must expand Remind content');
+    const contentA = elA.querySelector('.system-message-content')?.textContent || '';
+    assert(contentA.includes('[MCP SuperAssistant reminder]') && contentA.includes('Emit raw'), `Expanded Remind must show full body, got: ${contentA}`);
+
+    // Case B: Markdown host converted `\n\n---\n` into `<hr>`, so `---` is absent from textContent
+    const elB = document.createElement('div');
+    elB.className = 'query-content';
+    elB.innerHTML = `<p>Summarize this repo</p><hr><p>${reminderBody}</p>`;
+    document.body.appendChild(elB);
+
+    assert(renderFunctionResult(elB, { current: false }) === true, 'Remind + prompt (<hr>) must render as system/reminder box');
+    assert(elB.querySelector('.function-result-container') === null, 'Remind (<hr>) must NOT render as Tool result');
+    const userTextB = elB.querySelector('.system-message-user-text')?.textContent?.trim();
+    assert(userTextB === 'Summarize this repo', `Expected user prompt preserved for <hr>, got: ${userTextB}`);
+    elB.querySelector<HTMLButtonElement>('.system-message-container .expand-button')!.click();
+    assert(elB.querySelector('.system-message-container')?.classList.contains('expanded'), 'Clicking expand (<hr>) must expand Remind content');
+    assert(
+      elB.querySelector('.system-message-content')?.textContent?.includes('[MCP SuperAssistant reminder]'),
+      'Expanded Remind (<hr>) must contain reminder body',
+    );
+
+    // Case C: Plain prompt merely mentioning `<function_result>` without closing tag stays untouched
+    const elC = document.createElement('div');
+    elC.className = 'query-content';
+    elC.textContent = 'Explain what <function_result> tag means';
+    document.body.appendChild(elC);
+    assert(renderFunctionResult(elC, { current: false }) === false, 'Unpaired <function_result> prose must NOT be collapsed');
   });
 
   window.__testResults = results;

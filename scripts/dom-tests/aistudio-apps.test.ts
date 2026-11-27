@@ -3,10 +3,13 @@
 
 import { AIStudioAdapter } from '@src/plugins/adapters/aistudio.adapter';
 import {
+  findAistudioAppsButtonInsertionPoint,
   findAistudioAppsInput,
   isAistudioAppsRoute,
   submitAistudioAppsInput,
 } from '@src/plugins/adapters/aistudio-apps';
+import { WEBSITE_CONFIGS } from '@src/render_prescript/src/core/config';
+import { renderFunctionResult } from '@src/render_prescript/src/renderer/functionResult';
 import {
   canAistudioAppsAutoExecute,
   initializeAistudioAppsTurnGate,
@@ -858,6 +861,58 @@ async function main() {
     window.dispatchEvent(new Event('popstate'));
     assert(isAistudioAppsHost() === false, 'After leaving /apps for Playground, isAistudioAppsHost must be false');
     assert(isAistudioHost() === true, 'After navigating from /apps to Playground, isAistudioHost must be true');
+  });
+
+  // Test 11: /app/apps MCP button lands in .actions-container next to ms-add-media-menu & /apps/<id> folds user tool results
+  await runTest('/app/apps landing button targets .actions-container and /apps/<id> .bubble.user folds function_result', async () => {
+    document.body.innerHTML = '';
+    window.__setMockHost('aistudio.google.com');
+    window.__setMockPath('/app/apps');
+
+    const form = document.createElement('ms-applet-generator-form');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'prompt-input-wrapper row column';
+    const actions = document.createElement('div');
+    actions.className = 'actions-container';
+    const addMedia = document.createElement('ms-add-media-menu');
+    const spacer = document.createElement('span');
+    spacer.className = 'spacer';
+    const modeSel = document.createElement('ms-mode-selector');
+    actions.append(addMedia, spacer, modeSel);
+    wrapper.appendChild(actions);
+    form.appendChild(wrapper);
+    document.body.appendChild(form);
+
+    const insertion = findAistudioAppsButtonInsertionPoint();
+    assert(insertion !== null, 'Expected button insertion point on /app/apps');
+    assert(insertion!.container === actions, 'MCP button container must be .actions-container, not .prompt-input-wrapper');
+    assert(insertion!.insertAfter === addMedia, 'MCP button must insert immediately after ms-add-media-menu');
+
+    // Verify Workspace /apps/<id> selector and collapsing behavior
+    const aistudioCfg = WEBSITE_CONFIGS.find(c => c.urlPattern === 'aistudio');
+    assert(
+      aistudioCfg?.config.function_result_selector?.includes('ms-code-assistant-chat .bubble.user'),
+      'aistudio config must include ms-code-assistant-chat .bubble.user selector',
+    );
+
+    const chat = document.createElement('ms-code-assistant-chat');
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble user ng-star-inserted';
+    bubble.textContent = '<function_result call_id="1">hello apps result</function_result>';
+    chat.appendChild(bubble);
+    document.body.appendChild(chat);
+
+    assert(renderFunctionResult(bubble, { current: false }) === true, 'Workspace user bubble tool result must render');
+    const card = bubble.querySelector<HTMLElement>('.function-result-container');
+    assert(card !== null, 'Expected collapsible .function-result-container inside .bubble.user');
+    const expandBtn = card!.querySelector<HTMLButtonElement>('.expand-button');
+    assert(expandBtn !== null, 'Expected expand button on collapsed tool result');
+    expandBtn!.click();
+    assert(card!.classList.contains('expanded'), 'Clicking expand button must expand result card');
+    assert(
+      card!.querySelector('.function-result-content')?.textContent?.includes('hello apps result'),
+      'Expanded content must show tool result payload',
+    );
   });
 
   window.__testResults = results;

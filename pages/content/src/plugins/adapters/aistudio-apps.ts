@@ -125,6 +125,17 @@ export const getAistudioAppsChipAnchors = (): ChipAnchors | null => {
   };
 };
 
+/** Locate the MCP button insertion point on `/app/apps` landing page (`ms-applet-generator-form .actions-container`). */
+export const findAistudioAppsButtonInsertionPoint = (): { container: Element; insertAfter: Element | null } | null => {
+  const actionsContainer = document.querySelector('ms-applet-generator-form .actions-container');
+  if (!actionsContainer) return null;
+  const addMediaMenu = actionsContainer.querySelector(':scope > ms-add-media-menu');
+  return {
+    container: actionsContainer,
+    insertAfter: addMediaMenu ?? null,
+  };
+};
+
 /** Read normalized plain text from either a native textarea/input or a contenteditable composer. */
 export const readAistudioAppsEditableText = (input: HTMLElement): string => {
   if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {

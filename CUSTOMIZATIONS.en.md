@@ -53,6 +53,16 @@ After changing the toggle, re-run the generator and restart the proxy; the runni
 
 Detailed implementation-level notes for each release and fix. User-facing summaries live in [README.en.md](README.en.md) and [CHANGELOG.en.md](CHANGELOG.en.md).
 
+### v0.1.9 (2026-11-27)
+
+- **Fixed `Remind` + user prompt collapsing into an unexpandable empty "Tool result" and Markdown `<hr>` splitting (`functionResult.ts`, `functionResultObserver.ts`, `scripts/dom-tests/gemini.test.ts`).**
+  - Root cause: `generateInstructionReminder()` mentions `<function_result>` literally without `<system>` tags or a closing `</function_result>`. `renderFunctionResult()` matched loose `content.includes('<function_result')`, extracted an empty string, hid the user's prompt, and built a zero-height unexpandable Tool result card; furthermore, Markdown hosts convert `\n\n---\n` to `<hr>`, omitting `---` from `textContent`.
+  - Fix: Explicitly detect `[MCP SuperAssistant reminder]` in both `functionResult.ts` and `functionResultObserver.ts`, reuse `chips.mcpReminder` (`MCP Reminder` / `MCP提醒`) for the header, fall back to splitting at the instruction/reminder header (`splitIdx = sep >= 0 ? sep : sysIdx`) when `---` is rendered as `<hr>`, require a paired `<function_result\b[^>]*>([\s\S]*?)<\/function_result>` match before folding as a Tool result, and add coverage for `---`, `<hr>`, and unpaired prose mentions in `scripts/dom-tests/gemini.test.ts`.
+- **Fixed AI Studio Build / Apps landing MCP button placement and workspace user bubble collapsing (`aistudio-apps.ts`, `aistudio.adapter.ts`, `config.ts`, `scripts/dom-tests/aistudio-apps.test.ts`).**
+  - Fix: Added route-gated `findAistudioAppsButtonInsertionPoint()` in `aistudio-apps.ts` targeting `ms-applet-generator-form .actions-container` immediately after `:scope > ms-add-media-menu` (before `span.spacer`) with flex centering in `aistudio.adapter.ts`, appended `'ms-code-assistant-chat .bubble.user'` to `aistudio`'s `function_result_selector` in `config.ts`, and added a DOM regression test in `scripts/dom-tests/aistudio-apps.test.ts`.
+- **Reinforced `python -c` in Gemini `Remind` output (`instructionGeneratorCompact.ts`, `instructionGeneratorCompact.test.ts`).**
+  - Improvement: `generateInstructionReminder()` emits `short python -c script` when running on Gemini hosts while remaining under 750 characters, verified by unit test for both Gemini and non-Gemini hosts.
+
 ### v0.1.8 (2026-11-27)
 
 - **Fixed trailing cards in multi-call JSONL blocks freezing in `.function-loading` (`functionBlock.ts`, `scripts/dom-tests/gemini.test.ts`).**

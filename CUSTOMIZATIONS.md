@@ -53,6 +53,16 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config scripts/crewdispatch-c
 
 以下记录各版本的具体实现细节与故障根因分析。面向用户的简要更新说明见 [README.md](README.md) 与 [CHANGELOG.md](CHANGELOG.md)。
 
+### v0.1.9（2026-11-27）
+
+- **修复 `Remind` 合并提示词误判为空白“工具结果”与 `<hr>` 分割失效（`functionResult.ts`、`functionResultObserver.ts`、`scripts/dom-tests/gemini.test.ts`）。**
+  - 根因：`generateInstructionReminder()` 正文包含说明文字 `then STOP for <function_result>`，但既不带 `<system>` 也不带闭合标签 `</function_result>`。`renderFunctionResult()` 此前先以松散的 `content.includes('<function_result')` 命中并截取出空串，吞掉用户提问且渲染出无法展开的空白“工具结果”卡片；此外宿主 Markdown 渲染器会把 `\n\n---\n` 转成 `<hr>`，导致 `textContent` 中不存在 `---` 而无法分离用户正文。
+  - 修复：在 `functionResult.ts` 与 `functionResultObserver.ts` 中显式识别 `[MCP SuperAssistant reminder]`，复用现有国际化键 `chips.mcpReminder` 渲染为可展开的 **MCP提醒 / MCP Reminder** 卡片；当 `textContent` 无 `---` 时直接按指令/提醒起始标记（`splitIdx = sep >= 0 ? sep : sysIdx`）切分以保留用户提问；同时要求 `<function_result\b[^>]*>([\s\S]*?)<\/function_result>` 成对出现才按工具结果折叠，并在 `scripts/dom-tests/gemini.test.ts` 新增覆盖 `---`、`<hr>` 与未闭合提及场景的回归用例。
+- **修复 AI Studio Build / Apps 首页 MCP 按钮位置与工作区气泡折叠（`aistudio-apps.ts`、`aistudio.adapter.ts`、`config.ts`、`scripts/dom-tests/aistudio-apps.test.ts`）。**
+  - 修复：在 `aistudio-apps.ts` 新增仅于 `isAistudioAppsRoute()` 生效的 `findAistudioAppsButtonInsertionPoint()`，定位 `ms-applet-generator-form .actions-container` 并插在 `:scope > ms-add-media-menu` 之后、`span.spacer` 之前且垂直居中对齐，避免回退到外层纵向 `.prompt-input-wrapper`；在 `config.ts` 为 `aistudio` 的 `function_result_selector` 追加 `'ms-code-assistant-chat .bubble.user'`；并在 `scripts/dom-tests/aistudio-apps.test.ts` 补充对应回归用例。
+- **在 Gemini `Remind` 中补充 `python -c` 引导（`instructionGeneratorCompact.ts`、`instructionGeneratorCompact.test.ts`）。**
+  - 改进：`generateInstructionReminder()` 在检测到 Gemini 宿主时将编辑后备引导细化为 `short python -c script`，保持 `< 750` 字符预算并更新单元测试覆盖非 Gemini 与 Gemini 两种输出。
+
 ### v0.1.8（2026-11-27）
 
 - **修复多调用 JSONL 代码块中后续卡片卡死在 `.function-loading`（`functionBlock.ts`、`scripts/dom-tests/gemini.test.ts`）。**

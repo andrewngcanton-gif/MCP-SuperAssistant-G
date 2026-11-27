@@ -234,7 +234,8 @@ export const startFunctionResultMonitoring = (): void => {
             if (
               CONFIG.function_result_selector?.some(matchesOrContains) ||
               text.includes('<function_result') ||
-              text.includes('</function_result>')
+              text.includes('</function_result>') ||
+              text.includes('[MCP SuperAssistant reminder]')
             ) {
               potentialFunctionResult = true;
               shouldProcess = true;
@@ -243,7 +244,11 @@ export const startFunctionResultMonitoring = (): void => {
           } else if (node.nodeType === Node.TEXT_NODE) {
             // Also check text nodes for function result patterns
             const textContent = node.textContent || '';
-            if (textContent.includes('<function_result') || textContent.includes('</function_result>')) {
+            if (
+              textContent.includes('<function_result') ||
+              textContent.includes('</function_result>') ||
+              textContent.includes('[MCP SuperAssistant reminder]')
+            ) {
               potentialFunctionResult = true;
               shouldProcess = true;
               break;
@@ -253,7 +258,11 @@ export const startFunctionResultMonitoring = (): void => {
       } else if (mutation.type === 'characterData') {
         // Check if the characterData mutation might be adding function result content
         const textContent = mutation.target.textContent || '';
-        if (textContent.includes('<function_result') || textContent.includes('</function_result>')) {
+        if (
+          textContent.includes('<function_result') ||
+          textContent.includes('</function_result>') ||
+          textContent.includes('[MCP SuperAssistant reminder]')
+        ) {
           potentialFunctionResult = true;
           shouldProcess = true;
         }

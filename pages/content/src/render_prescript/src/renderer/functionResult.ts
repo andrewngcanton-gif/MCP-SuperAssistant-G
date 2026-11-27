@@ -206,7 +206,7 @@ const replaceBlockContent = (block: HTMLElement, newContent: HTMLElement): void 
  * @param block HTML element to render the system message in
  * @param content The system message content
  */
-const renderSystemMessageBox = (block: HTMLElement, content: string): void => {
+const renderSystemMessageBox = (block: HTMLElement, content: string, isReminder = false): void => {
   try {
     // Generate a unique ID for this block
     const blockId = `system-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -219,7 +219,7 @@ const renderSystemMessageBox = (block: HTMLElement, content: string): void => {
     const config: ExpandableConfig = {
       blockId,
       className: 'system-message-container',
-      headerKey: 'card.systemContextTitle',
+      headerKey: isReminder ? 'chips.mcpReminder' : 'card.systemContextTitle',
       expandTitleKey: 'card.expandSystemMsg',
       collapseTitleKey: 'card.collapseSystemMsg',
     };
@@ -235,13 +235,20 @@ const renderSystemMessageBox = (block: HTMLElement, content: string): void => {
     contentArea.style.overflowWrap = 'break-word';
     contentArea.style.fontFamily =
       'var(--font-system), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    // Chip flush sends "<user text>\n\n---\n<instructions/context>": keep the user's own words
-    // visible and fold only the appended part behind the toggle.
-    // Use the separator right before the instructions, not a "---" the user typed themselves.
-    const sysIdx = content.search(/\[SuperAssistant tools|<system>/i);
+    // Chip flush sends "<user text>\n\n---\n<instructions/context>"; Markdown hosts may turn `---` into <hr>
+    // (absent from textContent), so fall back to splitting directly at the instructions/reminder header.
+    const sysIdx = content.search(
+      /\[SuperAssistant tools|\[MCP SuperAssistant reminder\]|\[(?:MCP )?SuperAssistant browser tools|<system>/i,
+    );
     const sep = sysIdx < 0 ? content.indexOf('\n---\n') : content.lastIndexOf('\n---\n', sysIdx);
-    const userText = sep > 0 ? content.slice(0, sep).trim() : '';
-    contentArea.textContent = userText ? content.slice(sep + 5).trim() : content;
+    const splitIdx = sep >= 0 ? sep : sysIdx;
+    const userText = splitIdx > 0 ? content.slice(0, splitIdx).trim() : '';
+    contentArea.textContent =
+      sep >= 0
+        ? content.slice(sep + 5).trim()
+        : sysIdx > 0
+          ? content.slice(sysIdx).trim()
+          : content;
     expandableContent.appendChild(contentArea);
 
     // Setup expand/collapse functionality
@@ -384,35 +391,32 @@ export const renderFunctionResult = (block: HTMLElement, isProcessingRef: { curr
     // let content = block.textContent || '';
     let content = block.textContent || '';
 
-    // Check if it contains MCP SuperAssistant system message tags
-    if (content.includes('<SYSTEM>') || content.includes('</SYSTEM>') || content.includes('<system>') || content.includes('</system>')) {
-      // Extract content between SYSTEM tags
-      const systemMatch = content;
-      if (systemMatch) {
-        const systemContent = systemMatch.trim();
-        renderSystemMessageBox(block, systemContent);
-        return true;
-      }
+    // Check if it contains MCP SuperAssistant system message or reminder tags
+    const isSystemContext =
+      content.includes('<SYSTEM>') ||
+      content.includes('</SYSTEM>') ||
+      content.includes('<system>') ||
+      content.includes('</system>');
+    const isReminder = content.includes('[MCP SuperAssistant reminder]');
+    if (isSystemContext || isReminder) {
+      const systemContent = content.trim();
+      renderSystemMessageBox(block, systemContent, !isSystemContext && isReminder);
+      return true;
     }
 
-    // Check if it's a function result
-    if (!content.includes('<function_result') && !content.includes('</function_result>')) {
+    // Require a complete <function_result ...>...</function_result> pair so prose merely mentioning the tag is not collapsed.
+    const resultMatch = content.match(/<function_result\b[^>]*>([\s\S]*?)<\/function_result>/);
+    if (!resultMatch) {
       return false;
     }
 
     // Generate a unique ID for this block
     const blockId = `result-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     block.setAttribute('data-block-id', blockId);
-    
 
     // Parse the function result content
-    let resultContent = '';
+    const resultContent = resultMatch[1] ? resultMatch[1].trim() : '';
     try {
-      // Extract content between function_result tags
-      const resultMatch = content.match(/<function_result[^>]*>([\s\S]*?)<\/function_result>/);
-      if (resultMatch && resultMatch[1]) {
-        resultContent = resultMatch[1].trim();
-      }
 
       // Extract call_id if available
       const callIdMatch = content.match(/call_id="([^"]*)"/);
