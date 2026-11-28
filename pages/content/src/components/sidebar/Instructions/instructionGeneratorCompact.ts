@@ -47,7 +47,11 @@ const BROWSER_CORE_ORDER = [
 
 // First sentence of a description, truncated cleanly at a word boundary.
 export const oneLiner = (d?: string, maxLen = 58): string => {
-  const first = (d || '').trim().replace(/\s+/g, ' ').split(/(?<=[.!?])\s/)[0] || '';
+  const first =
+    (d || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .split(/(?<=[.!?])\s/)[0] || '';
   if (first.length <= maxLen) return first;
   const slice = first.slice(0, maxLen - 1);
   const lastSpace = slice.lastIndexOf(' ');
@@ -60,9 +64,7 @@ const INTERNAL_SCHEMA_KEYS = new Set<string>(['_wc']);
 const formatObjectRequiredHint = (schemaObj: Record<string, unknown>, fallback: string): string => {
   const req = Array.isArray(schemaObj.required) ? schemaObj.required : null;
   if (!req) return fallback;
-  const keys = req.filter(
-    (name): name is string => typeof name === 'string' && !INTERNAL_SCHEMA_KEYS.has(name),
-  );
+  const keys = req.filter((name): name is string => typeof name === 'string' && !INTERNAL_SCHEMA_KEYS.has(name));
   if (keys.length === 0) return fallback;
   return keys.length <= 3 ? `{${keys.join(', ')}}` : `{${keys.slice(0, 3).join(', ')}, …}`;
 };
@@ -70,9 +72,7 @@ const formatObjectRequiredHint = (schemaObj: Record<string, unknown>, fallback: 
 const formatCompactTypeHint = (propSchema: unknown): string => {
   if (!propSchema || typeof propSchema !== 'object' || Array.isArray(propSchema)) return '';
   const prop = propSchema as Record<string, unknown>;
-  const rawType = Array.isArray(prop.type)
-    ? prop.type.find(t => t !== 'null')
-    : prop.type;
+  const rawType = Array.isArray(prop.type) ? prop.type.find(t => t !== 'null') : prop.type;
 
   switch (rawType) {
     case 'boolean':
@@ -118,8 +118,7 @@ const extractConditionalSelector = (
         break;
       }
       const keys = req.filter(
-        (name): name is string =>
-          typeof name === 'string' && !INTERNAL_SCHEMA_KEYS.has(name) && !requiredSet.has(name),
+        (name): name is string => typeof name === 'string' && !INTERNAL_SCHEMA_KEYS.has(name) && !requiredSet.has(name),
       );
       if (keys.length === 0) {
         branches.length = 0;
@@ -181,8 +180,9 @@ export const formatCompactParamSignature = (schema?: string | Record<string, unk
   const hasVariants = Array.isArray(obj.oneOf) || Array.isArray(obj.anyOf);
   if (obj.type !== 'object' && !props && !req && !hasVariants) return '';
 
-  const requiredNames = (req ?? [])
-    .filter((name): name is string => typeof name === 'string' && !INTERNAL_SCHEMA_KEYS.has(name));
+  const requiredNames = (req ?? []).filter(
+    (name): name is string => typeof name === 'string' && !INTERNAL_SCHEMA_KEYS.has(name),
+  );
   const selector = extractConditionalSelector(obj, props, new Set(requiredNames));
   if (!selector && requiredNames.length === 0) return '()';
 
@@ -209,16 +209,18 @@ const splitToolNamespace = (name: string): { prefix: string; base: string } => {
 
 const isWebCodexGroup = (prefix: string, bases: Set<string>): boolean => {
   if (/^(?:mcp__)?webcodex(?:\.|__)$/i.test(prefix)) return true;
-  return prefix === '' && bases.has('run_shell') && bases.has('work_on_project');
+  return (
+    prefix === '' &&
+    bases.has('run_shell') &&
+    (bases.has('work_on_project') || (bases.has('list_projects') && bases.has('edit_project_files')))
+  );
 };
 
 /**
  * Partition enabled tools into high-frequency core tools (shown with short descriptions)
  * and deferred tools (grouped compactly by prefix for tool_lookup / get_tool_schema).
  */
-export const partitionToolsForCompactIndex = <T extends CompactToolInput>(
-  tools: T[],
-): CompactToolPartition<T> => {
+export const partitionToolsForCompactIndex = <T extends CompactToolInput>(tools: T[]): CompactToolPartition<T> => {
   if (!tools || tools.length === 0) return { core: [], deferredGroups: [] };
 
   const groups = new Map<string, Array<{ tool: T; base: string }>>();
@@ -286,8 +288,7 @@ const formatDeferredGroups = (groups: DeferredToolGroup[]): string => {
   return groups
     .map(({ prefix, names }) => {
       const label = prefix ? `${prefix}*` : 'other tools';
-      const preview =
-        names.length <= 20 ? names.join(', ') : `${names.slice(0, 12).join(', ')} … (use tool_lookup)`;
+      const preview = names.length <= 20 ? names.join(', ') : `${names.slice(0, 12).join(', ')} … (use tool_lookup)`;
       return `- More ${label} (${names.length}): ${preview}`;
     })
     .join('\n');
@@ -336,10 +337,7 @@ ${index}
 /**
  * Ultra-compact mid-conversation reminder to prevent rule/format drift in long chats.
  */
-export const generateInstructionReminder = (
-  tools: CompactToolInput[],
-  useRtkWithWebCodex?: boolean,
-): string => {
+export const generateInstructionReminder = (tools: CompactToolInput[], useRtkWithWebCodex?: boolean): string => {
   if (!tools || tools.length === 0) return '';
   const { core, deferredGroups } = partitionToolsForCompactIndex(tools);
   const coreNames = core.map(t => t.name).join(', ');
@@ -353,7 +351,9 @@ export const generateInstructionReminder = (
     : '';
   const wcRtk = useRtkWithWebCodex ? resolveWebCodexRtkTools(tools) : null;
   const rtkHint = wcRtk
-    ? `\nRTK: for long human-readable ${wcRtk.runProcess} output, use executable "rtk" with original args.`
+    ? wcRtk.runProcess
+      ? `\nRTK: for long human-readable ${wcRtk.runProcess} output, use executable "rtk" with original args.`
+      : `\nRTK: for long human-readable ${wcRtk.runShell} output, prefix supported commands with "rtk" (e.g. "rtk git diff").`
     : '';
   const moreHint = deferredCount > 0 ? ` (+${deferredCount} more via tool_lookup)` : '';
 

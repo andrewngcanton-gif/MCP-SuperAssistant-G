@@ -18,12 +18,13 @@ export interface AdvertisedTool {
 }
 
 export interface WebCodexRtkTools {
-  runProcess: string;
+  runProcess?: string;
+  runShell?: string;
   workOnProject?: string;
   listProjects?: string;
 }
 
-const BASE_NAMES = ['run_process', 'work_on_project', 'list_projects'] as const;
+const BASE_NAMES = ['run_process', 'run_shell', 'work_on_project', 'list_projects', 'edit_project_files'] as const;
 type BaseName = (typeof BASE_NAMES)[number];
 
 /**
@@ -68,18 +69,27 @@ export const resolveWebCodexRtkTools = (tools: AdvertisedTool[] | undefined): We
     }
   }
 
-  const named = [...servers.entries()].filter(
-    ([prefix, group]) => /^(?:mcp__)?webcodex$/i.test(prefix) && group.has('run_process'),
-  ).map(([, group]) => group);
-  const candidates = named.length ? named : [...servers.values()].filter(
-    group => group.has('run_process') && group.has('work_on_project'),
-  );
+  const hasRunner = (group: Map<BaseName, string>) => group.has('run_process') || group.has('run_shell');
+
+  const named = [...servers.entries()]
+    .filter(([prefix, group]) => /^(?:mcp__)?webcodex$/i.test(prefix) && hasRunner(group))
+    .map(([, group]) => group);
+  const fallback = [...servers.entries()]
+    .filter(
+      ([prefix, group]) =>
+        prefix === '' &&
+        hasRunner(group) &&
+        (group.has('work_on_project') || (group.has('list_projects') && group.has('edit_project_files'))),
+    )
+    .map(([, group]) => group);
+  const candidates = named.length ? named : fallback;
   if (candidates.length !== 1) return null;
 
   const [group] = candidates;
   return {
-    runProcess: group.get('run_process')!,
-    workOnProject: group.get('work_on_project'),
+    ...(group.has('run_process') ? { runProcess: group.get('run_process')! } : {}),
+    ...(group.has('run_shell') ? { runShell: group.get('run_shell')! } : {}),
+    ...(group.has('work_on_project') ? { workOnProject: group.get('work_on_project')! } : {}),
     ...(group.has('list_projects') ? { listProjects: group.get('list_projects')! } : {}),
   };
 };
@@ -96,8 +106,19 @@ export const buildRtkInstructions = (tools: AdvertisedTool[] | undefined): strin
     .filter(Boolean)
     .join('; ');
 
-  return `RTK OUTPUT COMPRESSION (WebCodex \`${names.runProcess}\` only)
+  if (names.runProcess) {
+    return `RTK OUTPUT COMPRESSION (WebCodex \`${names.runProcess}\` only)
 - Use executable \`rtk\` with original args (e.g. \`["git","log","-12"]\`) for supported commands with long human-readable output; include required schema params.${setup ? ` First: ${setup}.` : ''}
 - Use raw commands for unsupported, short, structured/machine-readable, full-log, hash, or audit output (or if RTK summary lacks detail). Windows pip: \`rtk python -m pip\`.
 - Never install RTK or alter trust/telemetry; run \`rtk trust\` only with explicit user consent.`;
+  }
+
+  if (names.runShell) {
+    return `RTK OUTPUT COMPRESSION (WebCodex \`${names.runShell}\`)
+- Prefix supported commands that produce long human-readable output with \`rtk\` (e.g. \`rtk git log -12\`, \`rtk git diff\`); include required schema params.${setup ? ` First: ${setup}.` : ''}
+- Use raw commands for unsupported, short, structured/machine-readable, full-log, hash, or audit output (or if RTK summary lacks detail). Windows pip: \`rtk python -m pip\`.
+- Never install RTK or alter trust/telemetry; run \`rtk trust\` only with explicit user consent.`;
+  }
+
+  return '';
 };

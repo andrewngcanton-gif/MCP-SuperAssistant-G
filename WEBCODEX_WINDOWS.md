@@ -8,12 +8,12 @@
   <a href="README.md">返回 README</a> &bull; <a href="WEBCODEX_MACOS.md">macOS 指南</a>
 </p>
 
-按下面 3 步即可接通（以下以本地 WebCodex **0.5.0** 为例）：
+按下面 3 步即可接通（兼容本地 WebCodex **0.5.0** 与 **0.5.1**；以下以实测的 **v0.5.0** 环境为例）：
 
 ## 1. 准备好 WebCodex
 
-- 启动 **[WebCodex Desktop v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0)**（或服务端）和 Runner，确认界面里显示 Runner **已连接**，并添加好你要让 AI 访问的本地项目目录。
-- 记下 WebCodex 服务的本地端口（下文以默认示例 `60143` 为例，若你改过端口请一并替换）。
+- 启动 **[WebCodex Desktop v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0)**（同样兼容 **[v0.5.1](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.1)**）或服务端与 Runner，确认界面里显示 Runner **已连接**，并添加好你要让 AI 访问的本地项目目录。
+- 记下 WebCodex 服务的本地端口（固定端口通常为 `60143`；若 `v0.5.1` 或自定义配置使用其他端口，方式 A 脚本会自动从 `desktop-state.json` 读取，方式 B 请手动替换）。
 
 ## 2. 生成代理配置文件（二选一）
 
@@ -30,7 +30,16 @@
   $token = (Get-Content -LiteralPath $tokenPath -Raw -ErrorAction Stop).Trim()
   if (-not $token) { throw 'The WebCodex token file is empty.' }
 
-  # 3) 写入或更新代理配置文件（已有自建 mcp-config.json 时可把下面路径改成你的文件）
+  # 3) 自动探测本地地址并写入代理配置文件（已有自建 mcp-config.json 时可把下面路径改成你的文件）
+  $serverBase = 'http://127.0.0.1:60143'
+  $statePath = Join-Path $env:LOCALAPPDATA 'dev.webcodex.desktop/desktop-state.json'
+  if (Test-Path -LiteralPath $statePath) {
+      try {
+          $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -ErrorAction Stop
+          if ($state.runtime.server_url) { $serverBase = $state.runtime.server_url.TrimEnd('/') }
+      } catch {}
+  }
+
   $configPath = Join-Path $env:LOCALAPPDATA 'mcp-superassistant-webcodex.json'
   $config = if (Test-Path -LiteralPath $configPath) {
       Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
@@ -40,7 +49,7 @@
   if (-not $config.Contains('mcpServers')) { $config['mcpServers'] = @{} }
   $config.mcpServers['webcodex'] = @{
       type = 'streamable-http'
-      url = 'http://127.0.0.1:60143/mcp'
+      url = "$serverBase/mcp"
       headers = @{
           'X-WebCodex-MCP-Surface' = 'cli'
           'Authorization' = "Bearer $token"
@@ -83,6 +92,8 @@
 
 - 打开网页侧栏的连接设置，连接类型选 **SSE**，**Server URI** 填 `http://localhost:3006/sse` 后点击 **Connect**。显示 **Connected** 后，切换到 **Tools** 标签页，确认已能看到并勾选 WebCodex 工具（例如 `webcodex.list_projects`、`webcodex.run_shell` 等）。
 
+  > **关于 `v0.5.0` 与 `v0.5.1` 工具数量说明**：带上 `"X-WebCodex-MCP-Surface": "cli"` 时，`v0.5.0` 会返回 17 个工具；`v0.5.1` 会精简返回 9 个核心工具（`list_projects`、`run_shell`、`observe_jobs`、`stop_job`、`search_project_texts`、`read_files`、`edit_project_files`、`read_tool_manifest`、`call_runtime_tool`），其余专用工具可通过 `read_tool_manifest` 与 `call_runtime_tool` 按需发现调用。两种版本均可直接配合本扩展使用（包括 **在 WebCodex 中使用 RTK** 开关）。
+
 ---
 
 <a id="webcodex-runner-config"></a>
@@ -102,7 +113,7 @@
      max_output_bytes = 262144
      ```
 
-   - **与 [WebCodex RTK 开关](README.md#新功能与改进) 联动**：在 `runner.toml` 同目录新建一个 `rtk-instructions.md`，并通过 `[instructions].files` 挂载。这样模型在调用 `work_on_project` 打开项目时也能拿到同一份 RTK 压缩规则：
+   - **与 [WebCodex RTK 开关](README.md#新功能与改进) 联动**：在 `v0.5.1` `cli` 9 工具模式下，打开扩展侧栏的 **在 WebCodex 中使用 RTK** 开关即可直接为 `run_shell` 注入 RTK 规则（无需 `work_on_project`）；如果你使用的是暴露了 `work_on_project` 的 `v0.5.0` 或 `adaptive` 工具面，还可以额外在 `runner.toml` 同目录新建 `rtk-instructions.md`，并通过 `[instructions].files` 挂载，让模型打开项目时一并拿到压缩规则：
 
      ```toml
      [instructions]

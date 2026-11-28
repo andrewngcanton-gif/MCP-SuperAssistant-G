@@ -8,12 +8,12 @@
   <a href="README.en.md">Back to README</a> &bull; <a href="WEBCODEX_MACOS.en.md">macOS guide</a>
 </p>
 
-Follow these 3 steps (using local WebCodex **0.5.0** as an example):
+Follow these 3 steps (compatible with local WebCodex **0.5.0** and **0.5.1**; examples below follow our tested **v0.5.0** setup):
 
 ## 1. Get WebCodex running
 
-- Start **[WebCodex Desktop v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0)** (or Server) and Runner, make sure the Runner shows as **Connected**, and register the local project folder(s) you want the AI to access.
-- Note WebCodex's local port (`60143` in the examples below; adjust if you configured a different port).
+- Start **[WebCodex Desktop v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0)** (also compatible with **[v0.5.1](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.1)**) or Server and Runner, make sure the Runner shows as **Connected**, and register the local project folder(s) you want the AI to access.
+- Note WebCodex's local port (usually `60143`; if `v0.5.1` or a custom setup uses another port, Option A auto-reads `runtime.server_url` from `desktop-state.json`, while Option B should update it manually).
 
 ## 2. Create the proxy config file (choose one option)
 
@@ -30,7 +30,16 @@ Follow these 3 steps (using local WebCodex **0.5.0** as an example):
   $token = (Get-Content -LiteralPath $tokenPath -Raw -ErrorAction Stop).Trim()
   if (-not $token) { throw 'The WebCodex token file is empty.' }
 
-  # 3) Write or update the proxy config file (change $configPath if using an existing mcp-config.json)
+  # 3) Auto-detect local endpoint & write proxy config (change $configPath if using an existing mcp-config.json)
+  $serverBase = 'http://127.0.0.1:60143'
+  $statePath = Join-Path $env:LOCALAPPDATA 'dev.webcodex.desktop/desktop-state.json'
+  if (Test-Path -LiteralPath $statePath) {
+      try {
+          $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -ErrorAction Stop
+          if ($state.runtime.server_url) { $serverBase = $state.runtime.server_url.TrimEnd('/') }
+      } catch {}
+  }
+
   $configPath = Join-Path $env:LOCALAPPDATA 'mcp-superassistant-webcodex.json'
   $config = if (Test-Path -LiteralPath $configPath) {
       Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
@@ -40,7 +49,7 @@ Follow these 3 steps (using local WebCodex **0.5.0** as an example):
   if (-not $config.Contains('mcpServers')) { $config['mcpServers'] = @{} }
   $config.mcpServers['webcodex'] = @{
       type = 'streamable-http'
-      url = 'http://127.0.0.1:60143/mcp'
+      url = "$serverBase/mcp"
       headers = @{
           'X-WebCodex-MCP-Surface' = 'cli'
           'Authorization' = "Bearer $token"
@@ -83,6 +92,8 @@ Follow these 3 steps (using local WebCodex **0.5.0** as an example):
 
 - In the extension sidebar's connection settings, choose **SSE**, enter `http://localhost:3006/sse` as **Server URI**, and click **Connect**. Once **Connected**, open the **Tools** tab and confirm the WebCodex tools (such as `webcodex.list_projects` and `webcodex.run_shell`) are listed and enabled.
 
+  > **Note on `v0.5.0` vs `v0.5.1` tool count**: With `"X-WebCodex-MCP-Surface": "cli"`, `v0.5.0` exposes 17 tools, whereas `v0.5.1` exposes 9 core tools (`list_projects`, `run_shell`, `observe_jobs`, `stop_job`, `search_project_texts`, `read_files`, `edit_project_files`, `read_tool_manifest`, `call_runtime_tool`) with specialized tools available via `read_tool_manifest` + `call_runtime_tool`. Both versions work directly with the extension (including **Use RTK with WebCodex**).
+
 ---
 
 <a id="webcodex-runner-config"></a>
@@ -102,7 +113,7 @@ Follow these 3 steps (using local WebCodex **0.5.0** as an example):
      max_output_bytes = 262144
      ```
 
-   - **Pair with [Optional WebCodex RTK guidance](README.en.md#new-features-and-improvements)**: create `rtk-instructions.md` next to `runner.toml` and attach it via `[instructions].files` so `work_on_project` also returns the RTK compression rules to the model:
+   - **Pair with [Optional WebCodex RTK guidance](README.en.md#new-features-and-improvements)**: On the `v0.5.1` `cli` 9-tool surface, turning on **Use RTK with WebCodex** in the extension sidebar directly injects `run_shell` RTK rules (no `work_on_project` needed). When using a surface that exposes `work_on_project` (`v0.5.0` or `adaptive`), you can also create `rtk-instructions.md` next to `runner.toml` and attach it via `[instructions].files` so `work_on_project` returns the compression rules too:
 
      ```toml
      [instructions]

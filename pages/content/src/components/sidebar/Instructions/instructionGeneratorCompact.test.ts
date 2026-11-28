@@ -11,15 +11,45 @@ import {
   oneLiner,
   partitionToolsForCompactIndex,
 } from './instructionGeneratorCompact';
+import { buildRtkInstructions } from './rtkInstructions';
+import { buildWebCodexFileEditGuidance } from './webcodexInstructions';
 
 const makeWebCodexTools = () => [
-  { name: 'webcodex.list_projects', schema: '{}', description: 'List configured projects and resolve their exact project IDs for subsequent tool calls.' },
-  { name: 'webcodex.work_on_project', schema: '{}', description: 'Bootstrap a workflow session for a registered project and inspect repository conventions.' },
-  { name: 'webcodex.search_project_texts', schema: '{}', description: 'Search literal strings or regular expressions across project files in parallel batches.' },
-  { name: 'webcodex.read_files', schema: '{}', description: 'Read bounded line ranges from one or more project files with line numbers.' },
-  { name: 'webcodex.list_project_files', schema: '{}', description: 'List files inside a project directory respecting ignore rules.' },
-  { name: 'webcodex.run_shell', schema: '{}', description: 'Run shell grammar or a short related command chain inside the project.' },
-  { name: 'webcodex.edit_project_files', schema: '{}', description: 'Apply structured JSON file edits to project paths.' },
+  {
+    name: 'webcodex.list_projects',
+    schema: '{}',
+    description: 'List configured projects and resolve their exact project IDs for subsequent tool calls.',
+  },
+  {
+    name: 'webcodex.work_on_project',
+    schema: '{}',
+    description: 'Bootstrap a workflow session for a registered project and inspect repository conventions.',
+  },
+  {
+    name: 'webcodex.search_project_texts',
+    schema: '{}',
+    description: 'Search literal strings or regular expressions across project files in parallel batches.',
+  },
+  {
+    name: 'webcodex.read_files',
+    schema: '{}',
+    description: 'Read bounded line ranges from one or more project files with line numbers.',
+  },
+  {
+    name: 'webcodex.list_project_files',
+    schema: '{}',
+    description: 'List files inside a project directory respecting ignore rules.',
+  },
+  {
+    name: 'webcodex.run_shell',
+    schema: '{}',
+    description: 'Run shell grammar or a short related command chain inside the project.',
+  },
+  {
+    name: 'webcodex.edit_project_files',
+    schema: '{}',
+    description: 'Apply structured JSON file edits to project paths.',
+  },
   { name: 'webcodex.find_definition', schema: '{}', description: 'Locate symbol definitions.' },
   { name: 'webcodex.find_references', schema: '{}', description: 'Locate symbol references.' },
   { name: 'webcodex.observe_jobs', schema: '{}', description: 'Observe background jobs.' },
@@ -274,4 +304,68 @@ test('generateInstructionsCompact includes inline core signatures to skip Turn-1
   assert.ok(out.includes('webcodex.read_files(project, files: object[]) —'));
   assert.ok(out.includes('Call core tools directly;'));
   assert.ok(out.length < 2500, `expected compact prompt with signatures < 2500 chars, got ${out.length}`);
+});
+
+const makeWebCodex051CliTools = (prefix = 'webcodex.') => [
+  { name: `${prefix}list_projects`, schema: '{}', description: 'List configured projects.' },
+  { name: `${prefix}run_shell`, schema: '{}', description: 'Run shell command inside the project.' },
+  { name: `${prefix}observe_jobs`, schema: '{}', description: 'Observe background jobs.' },
+  { name: `${prefix}stop_job`, schema: '{}', description: 'Stop a running background job.' },
+  { name: `${prefix}search_project_texts`, schema: '{}', description: 'Search text across project files.' },
+  { name: `${prefix}read_files`, schema: '{}', description: 'Read line ranges from project files.' },
+  { name: `${prefix}edit_project_files`, schema: '{}', description: 'Apply structured JSON file edits.' },
+  { name: `${prefix}read_tool_manifest`, schema: '{}', description: 'Read runtime tool manifest.' },
+  { name: `${prefix}call_runtime_tool`, schema: '{}', description: 'Invoke a runtime tool by name.' },
+];
+
+test('WebCodex v0.5.1 cli 9-tool surface injects run_shell RTK guidance and reminder', () => {
+  const tools = makeWebCodex051CliTools();
+  const rtk = buildRtkInstructions(tools);
+  assert.ok(rtk.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_shell`)'));
+  assert.ok(rtk.includes('rtk git log -12'));
+  assert.ok(rtk.includes('First: discover project via `webcodex.list_projects`.'));
+  assert.ok(rtk.includes('Windows pip: `rtk python -m pip`'));
+
+  const compact = generateInstructionsCompact(tools, '', false, true);
+  assert.ok(compact.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_shell`)'));
+
+  const reminder = generateInstructionReminder(tools, true);
+  assert.ok(reminder.includes('RTK: for long human-readable webcodex.run_shell output'));
+  assert.ok(reminder.includes('prefix supported commands with "rtk"'));
+  assert.ok(reminder.length < 850, `expected reminder with RTK < 850 chars, got ${reminder.length}`);
+});
+
+test('WebCodex v0.5.0 surface keeps preferring run_process over run_shell for RTK', () => {
+  const rtk = buildRtkInstructions(makeWebCodexTools());
+  assert.ok(rtk.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_process` only)'));
+  assert.ok(rtk.includes('Use executable `rtk` with original args'));
+});
+
+test('Unqualified WebCodex v0.5.1 9-tool surface enables RTK, file-edit guidance, and compact partition', () => {
+  const tools = makeWebCodex051CliTools('');
+  const rtk = buildRtkInstructions(tools);
+  assert.ok(rtk.includes('RTK OUTPUT COMPRESSION (WebCodex `run_shell`)'));
+
+  const fileEdit = buildWebCodexFileEditGuidance(tools);
+  assert.ok(fileEdit.includes('edit_project_files'));
+  assert.ok(fileEdit.includes('run_shell'));
+
+  const { core, deferredGroups } = partitionToolsForCompactIndex(tools);
+  assert.deepEqual(
+    core.map(t => t.name),
+    ['list_projects', 'search_project_texts', 'read_files', 'run_shell'],
+  );
+  assert.equal(deferredGroups.length, 1);
+  assert.equal(deferredGroups[0].names.length, 5);
+  assert.ok(deferredGroups[0].names.includes('edit_project_files'));
+});
+
+test('Non-WebCodex server with generic run_shell does not receive WebCodex RTK guidance', () => {
+  assert.equal(
+    buildRtkInstructions([
+      { name: 'run_shell', schema: '{}', description: 'Run a shell command.' },
+      { name: 'read_file', schema: '{}', description: 'Read a file.' },
+    ]),
+    '',
+  );
 });

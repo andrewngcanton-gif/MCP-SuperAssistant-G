@@ -49,7 +49,7 @@
 
 ## 新功能与改进
 
-- **WebCodex RTK 开关。** 先在运行 WebCodex Runner 的机器上安装 RTK 命令行工具，并确保 Runner 能在 `PATH` 中找到 `rtk`。直接使用原版 WebCodex 即可。侧栏 **Instructions → Use RTK with WebCodex** 默认关闭。启用 WebCodex 的 `run_process` 并打开开关后，将重新生成的 MCP Instructions 发到对话。指令会提示模型使用 RTK 压缩适用命令的长输出。若还希望 `work_on_project` 在打开项目时一并返回同一规则，可按 [Windows 进阶配置](WEBCODEX_WINDOWS.md#webcodex-runner-config) 或 [macOS 进阶配置](WEBCODEX_MACOS.md#webcodex-runner-config) 配置 Runner 的 `[instructions].files`。 [RTK 安装说明](https://github.com/rtk-ai/rtk)
+- **WebCodex RTK 开关。** 先在运行 WebCodex Runner 的机器上安装 RTK 命令行工具，并确保 Runner 能在 `PATH` 中找到 `rtk`。直接使用原版 WebCodex 即可。侧栏 **Instructions → Use RTK with WebCodex** 默认关闭。启用 WebCodex 的命令执行工具（`v0.5.0` 为 `run_process`，`v0.5.1` 为 `run_shell`）并打开开关后，将重新生成的 MCP Instructions 发到对话。指令会提示模型使用 RTK 压缩适用命令的长输出。若在保留 `work_on_project` 的工具面（`v0.5.0` 或 `adaptive`）下还希望打开项目时一并返回同一规则，可按 [Windows 进阶配置](WEBCODEX_WINDOWS.md#webcodex-runner-config) 或 [macOS 进阶配置](WEBCODEX_MACOS.md#webcodex-runner-config) 配置 Runner 的 `[instructions].files`。 [RTK 安装说明](https://github.com/rtk-ai/rtk)
 - **WebCodex 文件编辑规则。** 指令说明 `edit_project_files` 必须提供 `project` 和 `changes`，每项包含 `kind` 和 `path`。内容复杂或首次报错时，提示模型改用同一 WebCodex 服务上可用的 `run_shell`，以减少重复尝试和 token 消耗。
 - **更短的 MCP Instructions。** 精简 Compact 和 JSON 两种模板的自然语言，保留必填参数、schema 查询方式、调用示例以及 WebCodex 和 RTK 规则。去掉收到 schema 错误提示就重试的通用指令。
 - **CrewDispatch 代理配置开关。** CrewDispatch 插件的公开发布版已过时，后续不再更新。大多数用户可以忽略此选项，保持默认关闭。已有可运行的 CrewDispatch MCP 服务时，可以用配置生成器注册。修改开关后，重新生成代理配置并重启代理即可生效。 [CrewDispatch 配置指南](CUSTOMIZATIONS.md#crewdispatch-opt-in-proxy-configuration)
@@ -93,7 +93,7 @@
 
 #### 与 WebCodex 配合使用
 
-[WebCodex](https://github.com/yyjeqhc/webcodex)（Windows 实测 [v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0)，macOS 实测 [v0.5.1](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.1)）可以把你电脑上的代码目录打包成“读文件 / 搜代码 / 跑终端命令”等 MCP 工具，让网页里的 Gemini 或 AI Studio 也能像本地编程助手一样查看和修改你的本地项目。
+[WebCodex](https://github.com/yyjeqhc/webcodex)（Windows 实测 [v0.5.0](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.0) 并兼容 [v0.5.1](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.1)，macOS 实测 [v0.5.1](https://github.com/yyjeqhc/webcodex/releases/tag/v0.5.1)）可以把你电脑上的代码目录打包成“读文件 / 搜代码 / 跑终端命令”等 MCP 工具，让网页里的 Gemini 或 AI Studio 也能像本地编程助手一样查看和修改你的本地项目。
 
 整体连接链路如下（本地 Proxy 负责把本扩展使用的 SSE 协议桥接到 WebCodex 的 `/mcp` 接口）：
 

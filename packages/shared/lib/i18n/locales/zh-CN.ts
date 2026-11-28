@@ -211,7 +211,8 @@ export const zhCN: Record<MessageKey, string> = {
   'tools.groupServer': '服务器',
 
   'instructions.useRtkTitle': '在WebCodex中使用RTK',
-  'instructions.useRtkDesc': '启用WebCodex的run_process工具后，在生成的指令中加入RTK输出压缩引导（默认关闭）。',
+  'instructions.useRtkDesc':
+    '启用WebCodex的命令执行工具（run_process或run_shell）后，在生成的指令中加入RTK输出压缩引导（默认关闭）。',
   'instructions.customTitle': '自定义指令',
   'instructions.customPlaceholder': '在此输入你的自定义指令...',
   'instructions.customEmpty': '未设置自定义指令',

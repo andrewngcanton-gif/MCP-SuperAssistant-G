@@ -21,7 +21,7 @@ export interface WebCodexFileTools {
   runShell?: string;
 }
 
-const BASE_NAMES = ['edit_project_files', 'run_shell', 'work_on_project'] as const;
+const BASE_NAMES = ['edit_project_files', 'run_shell', 'work_on_project', 'list_projects'] as const;
 type BaseName = (typeof BASE_NAMES)[number];
 
 const matchBaseName = (advertised: string, base: BaseName): { prefix: string; full: string } | null => {
@@ -39,9 +39,7 @@ const matchBaseName = (advertised: string, base: BaseName): { prefix: string; fu
  * Resolve one WebCodex server's file-edit surface, or null when no unambiguous WebCodex
  * `edit_project_files` is advertised. `runShell` may be absent (disabled/unavailable).
  */
-export const resolveWebCodexFileTools = (
-  tools: AdvertisedTool[] | undefined,
-): WebCodexFileTools | null => {
+export const resolveWebCodexFileTools = (tools: AdvertisedTool[] | undefined): WebCodexFileTools | null => {
   if (!tools || tools.length === 0) return null;
 
   // server prefix -> base name -> advertised full name
@@ -62,13 +60,18 @@ export const resolveWebCodexFileTools = (
     !!group?.has('edit_project_files');
 
   // Prefer an explicit WebCodex namespace, even when run_shell is disabled there. Fall back only
-  // to an unqualified local server that also advertises work_on_project and run_shell.
+  // to an unqualified local server that also advertises work_on_project or list_projects with run_shell.
   const named = [...servers.entries()]
     .filter(([prefix, group]) => /^(?:mcp__)?webcodex$/i.test(prefix) && hasEdit(group))
     .map(([, group]) => group);
   const fallback = [...servers.entries()]
-    .filter(([prefix, group]) =>
-      prefix === '' && hasEdit(group) && !!group.has('run_shell') && group.has('work_on_project'))
+    .filter(
+      ([prefix, group]) =>
+        prefix === '' &&
+        hasEdit(group) &&
+        !!group.has('run_shell') &&
+        (group.has('work_on_project') || group.has('list_projects')),
+    )
     .map(([, group]) => group);
   const candidates = named.length ? named : fallback;
   if (candidates.length !== 1) return null;

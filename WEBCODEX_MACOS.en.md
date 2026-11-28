@@ -222,7 +222,7 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config ./mcp-config.json --ou
    max_output_bytes = 262144
    ```
 
-   To pair with the extension's [Optional WebCodex RTK guidance](README.en.md#new-features-and-improvements), create `rtk-instructions.md` next to `runner.toml` and reference it under `[instructions].files`:
+   On the `v0.5.1` `cli` 9-tool surface, turning on [Optional WebCodex RTK guidance](README.en.md#new-features-and-improvements) in the extension sidebar directly injects `run_shell` RTK rules (no `work_on_project` needed). Only when using a surface that exposes `work_on_project` (`v0.5.0` or `adaptive`) do you need to create `rtk-instructions.md` next to `runner.toml` and attach it via `[instructions].files`:
 
    ```toml
    [instructions]
