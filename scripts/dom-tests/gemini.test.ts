@@ -749,6 +749,35 @@ async function main() {
 
     const errTextB = document.querySelector('.function-block[data-block-id="err400-b"] .function-result-error')?.textContent || '';
     assert(errTextB.includes('Request timed out. Please try again.'), `Plain timeout must still map to friendly message, got: ${errTextB}`);
+
+    const preC = document.createElement('pre');
+    preC.setAttribute('data-block-id', 'err-unknown-c');
+    preC.textContent = [
+      '{"type":"function_call_start","name":"webcodex.edit_file","call_id":103}',
+      '{"type":"parameter","key":"path","value":"a.kt"}',
+      '{"type":"function_call_end","call_id":103}',
+    ].join('\n');
+    document.body.appendChild(preC);
+    assert(renderFunctionCall(preC, { current: false }) === true, 'preC should render');
+
+    const unknownErr =
+      'Unknown tool "webcodex.edit_file" is not available in the current tool list. Do NOT stop or ask the user to refresh tools/list; the tool list is already live. Available tools: webcodex.run_shell, webcodex.check_timeout, webcodex.test_connection. Retry immediately with a valid tool name.';
+    (window as any).mcpClient = {
+      isReady: () => true,
+      callTool: async () => {
+        throw new Error(unknownErr);
+      },
+    };
+
+    const runBtnC = document.querySelector<HTMLButtonElement>('.function-block[data-block-id="err-unknown-c"] .execute-button');
+    assert(runBtnC !== null, 'Card C must render Run button');
+    runBtnC!.click();
+    await sleep(60);
+
+    const errTextC = document.querySelector('.function-block[data-block-id="err-unknown-c"] .function-result-error')?.textContent || '';
+    assert(errTextC.includes('Unknown tool "webcodex.edit_file"'), `Unknown tool message must be preserved, got: ${errTextC}`);
+    assert(!errTextC.includes('Connection lost'), `Unknown tool must not be rewritten as connection lost: ${errTextC}`);
+    assert(!errTextC.includes('Request timed out'), `Unknown tool must not be rewritten as timeout: ${errTextC}`);
   });
 
   // Test 12: Remind + user prompt folds as expandable MCP Reminder (not empty Tool result), both with `---` and `<hr>`

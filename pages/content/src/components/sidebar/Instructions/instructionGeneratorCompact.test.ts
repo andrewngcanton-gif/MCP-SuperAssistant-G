@@ -94,7 +94,15 @@ test('generateInstructionsCompact stays lean on Gemini and avoids legacy json fe
   (globalThis as any).location = { hostname: 'gemini.google.com' };
   try {
     const out = generateInstructionsCompact(makeWebCodexTools(), '', false, false);
-    assert.ok(out.length < 2400, `expected compact prompt < 2400 chars, got ${out.length}`);
+    assert.ok(out.length < 2790, `expected compact prompt < 2790 chars, got ${out.length}`);
+    assert.ok(out.includes('WEBCODEX RULES'));
+    assert.ok(
+      out.includes(
+        'In `webcodex.search_project_texts`, put optional `path` inside each `queries[]` item (never top-level) and omit `context_before`/`context_after`',
+      ),
+    );
+    assert.ok(out.includes('Combine needed file ranges into one `webcodex.read_files` call'));
+    assert.ok(out.includes('use `start_line`+`limit`, not `end_line`'));
     assert.ok(out.includes('Gemini note: Never use Python'));
     assert.ok(out.includes('python -c') && out.includes('PowerShell'));
     assert.ok(!out.includes('```json\n'));
@@ -304,7 +312,7 @@ test('generateInstructionsCompact includes inline core signatures to skip Turn-1
   assert.ok(out.includes('webcodex.run_shell(project, command) —'));
   assert.ok(out.includes('webcodex.read_files(project, files: object[]) —'));
   assert.ok(out.includes('Call core tools directly; never call get_tool_schema for listed core tools'));
-  assert.ok(out.length < 2500, `expected compact prompt with signatures < 2500 chars, got ${out.length}`);
+  assert.ok(out.length < 2860, `expected compact prompt with signatures < 2860 chars, got ${out.length}`);
 });
 
 const makeWebCodex051CliTools = (prefix = 'webcodex.') => [
@@ -366,6 +374,9 @@ test('Unqualified WebCodex v0.5.1 9-tool surface enables RTK, file-edit guidance
   assert.ok(rtk.includes('RTK OUTPUT COMPRESSION (WebCodex `run_shell`)'));
 
   const fileEdit = buildWebCodexFileEditGuidance(tools);
+  assert.ok(fileEdit.includes('WEBCODEX RULES'));
+  assert.ok(fileEdit.includes('search_project_texts'));
+  assert.ok(fileEdit.includes('read_files'));
   assert.ok(fileEdit.includes('edit_project_files'));
   assert.ok(fileEdit.includes('run_shell'));
 
@@ -384,6 +395,37 @@ test('Non-WebCodex server with generic run_shell does not receive WebCodex RTK g
     buildRtkInstructions([
       { name: 'run_shell', schema: '{}', description: 'Run a shell command.' },
       { name: 'read_file', schema: '{}', description: 'Read a file.' },
+    ]),
+    '',
+  );
+});
+
+test('WebCodex search/read/edit rules adapt independently to disabled tools and ignore non-WebCodex servers', () => {
+  const withoutEdit = makeWebCodexTools().filter(t => t.name !== 'webcodex.edit_project_files');
+  const guidanceNoEdit = buildWebCodexFileEditGuidance(withoutEdit);
+  assert.ok(guidanceNoEdit.includes('WEBCODEX RULES'));
+  assert.ok(guidanceNoEdit.includes('webcodex.search_project_texts'));
+  assert.ok(guidanceNoEdit.includes('webcodex.read_files'));
+  assert.ok(!guidanceNoEdit.includes('edit_project_files'));
+
+  const reminderNoEdit = generateInstructionReminder(withoutEdit, false);
+  assert.ok(!reminderNoEdit.includes('undefined'));
+  assert.ok(!reminderNoEdit.includes('WebCodex edits:'));
+
+  const searchOnly = withoutEdit.filter(t => t.name !== 'webcodex.read_files');
+  const guidanceSearchOnly = buildWebCodexFileEditGuidance(searchOnly);
+  assert.ok(guidanceSearchOnly.includes('webcodex.search_project_texts'));
+  assert.ok(!guidanceSearchOnly.includes('read_files'));
+
+  const readOnly = withoutEdit.filter(t => t.name !== 'webcodex.search_project_texts');
+  const guidanceReadOnly = buildWebCodexFileEditGuidance(readOnly);
+  assert.ok(guidanceReadOnly.includes('webcodex.read_files'));
+  assert.ok(!guidanceReadOnly.includes('search_project_texts'));
+
+  assert.equal(
+    buildWebCodexFileEditGuidance([
+      { name: 'run_shell', schema: '{}', description: 'Run a shell command.' },
+      { name: 'read_files', schema: '{}', description: 'Read files.' },
     ]),
     '',
   );

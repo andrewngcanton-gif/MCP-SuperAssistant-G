@@ -1,4 +1,5 @@
 import { useToolStore } from '../stores/tool.store';
+import { resolveWebCodexFileTools } from '../components/sidebar/Instructions/webcodexInstructions';
 
 /**
  * Meta-tools — client-side discovery helpers that never reach the background /
@@ -71,11 +72,7 @@ export function compactInputSchema(schema: unknown): unknown {
   return out;
 }
 
-export function executeMetaTool(
-  name: string,
-  args: Record<string, unknown>,
-  tools: MetaToolRecord[],
-) {
+export function executeMetaTool(name: string, args: Record<string, unknown>, tools: MetaToolRecord[]) {
   if (name === GET_TOOL_SCHEMA) {
     const names: string[] = Array.isArray((args as any).names)
       ? ((args as any).names as string[])
@@ -98,7 +95,9 @@ export function executeMetaTool(
   }
 
   // tool_lookup: keyword search (or empty/* to list) -> returns concise index lines, no schema
-  const rawQuery = String((args as any).query || '').trim().toLowerCase();
+  const rawQuery = String((args as any).query || '')
+    .trim()
+    .toLowerCase();
   const listAll = !rawQuery || rawQuery === '*' || rawQuery === 'all';
   let matches: MetaToolRecord[];
   if (listAll) {
@@ -116,23 +115,82 @@ export function executeMetaTool(
       });
     }
   }
-  const hits = matches
-    .slice(0, 30)
-    .map(t => `- ${t.name} — ${clampText(t.description, 90) || ''}`);
+  const hits = matches.slice(0, 30).map(t => `- ${t.name} — ${clampText(t.description, 90) || ''}`);
   const suffix = matches.length > 30 ? `\n… (${matches.length - 30} more; narrow query)` : '';
   return {
-    content: [{
-      type: 'text',
-      text: hits.length ? hits.join('\n') + suffix : `No tools match "${rawQuery}".`,
-    }],
+    content: [
+      {
+        type: 'text',
+        text: hits.length ? hits.join('\n') + suffix : `No tools match "${rawQuery}".`,
+      },
+    ],
   };
+}
+
+const EDIT_LIKE_TOOL_RE = /(?:^|[._-])(?:edit|write|patch|replace|create|modify|update|apply)(?:[._-]|$|file|patch)/i;
+
+const getActiveTools = (
+  availableTools: MetaToolRecord[],
+  enabledTools?: Set<string>,
+  isLoadingEnablement?: boolean,
+): MetaToolRecord[] => {
+  const shouldFilter = enabledTools instanceof Set && (!isLoadingEnablement || enabledTools.size > 0);
+  return shouldFilter ? availableTools.filter(t => enabledTools.has(t.name)) : availableTools;
+};
+
+/**
+ * Local pre-flight guard for hallucinated/unknown tool names.
+ * Returns null when the tool is known, virtual (`browser_*`), a meta-tool, or when the
+ * available tool catalog is not populated yet. Otherwise returns a concise self-healing
+ * error message that keeps auto-execute/auto-submit loops moving without hitting the proxy.
+ */
+export function buildUnknownToolError(
+  toolName: string,
+  availableTools: MetaToolRecord[],
+  enabledTools?: Set<string>,
+  isLoadingEnablement?: boolean,
+): string | null {
+  if (!toolName || META_TOOLS.has(toolName) || toolName.startsWith('browser_')) return null;
+  if (!availableTools || availableTools.length === 0) return null;
+  if (availableTools.some(t => t.name === toolName)) return null;
+
+  const activeTools = getActiveTools(availableTools, enabledTools, isLoadingEnablement);
+  const pool = activeTools.length > 0 ? activeTools : availableTools;
+
+  const dotIdx = toolName.indexOf('.');
+  const dunderIdx = toolName.lastIndexOf('__');
+  const prefix = dotIdx > 0 ? toolName.slice(0, dotIdx + 1) : dunderIdx > 0 ? toolName.slice(0, dunderIdx + 2) : '';
+  const samePrefix = prefix ? pool.filter(t => t.name.startsWith(prefix)) : [];
+  const candidatePool = samePrefix.length > 0 ? samePrefix : pool;
+
+  const maxListed = 12;
+  const listedNames = candidatePool.slice(0, maxListed).map(t => t.name);
+  const moreCount = candidatePool.length - listedNames.length;
+  const moreSuffix = moreCount > 0 ? ` (+${moreCount} more via ${TOOL_LOOKUP})` : '';
+
+  let editHint = '';
+  if (EDIT_LIKE_TOOL_RE.test(toolName)) {
+    const wcFiles = resolveWebCodexFileTools(pool);
+    if (wcFiles?.runShell && wcFiles?.editProjectFiles) {
+      editHint = ` For file edits, use "${wcFiles.runShell}" (preferred for multiline/quote-heavy edits) or "${wcFiles.editProjectFiles}".`;
+    } else if (wcFiles?.runShell) {
+      editHint = ` For file edits, use "${wcFiles.runShell}".`;
+    } else if (wcFiles?.editProjectFiles) {
+      editHint = ` For file edits, use "${wcFiles.editProjectFiles}".`;
+    }
+  }
+
+  return (
+    `Unknown tool "${toolName}" is not available in the current tool list. ` +
+    `Do NOT stop or ask the user to refresh tools/list; the tool list is already live.` +
+    `${editHint} ` +
+    `Available tools: ${listedNames.join(', ')}${moreSuffix}. ` +
+    `Retry immediately with a valid tool name (or call ${TOOL_LOOKUP} / ${GET_TOOL_SCHEMA}).`
+  );
 }
 
 export function runMetaTool(name: string, args: Record<string, unknown>) {
   const { availableTools, enabledTools, isLoadingEnablement } = useToolStore.getState();
-  const shouldFilter = enabledTools instanceof Set && (!isLoadingEnablement || enabledTools.size > 0);
-  const activeTools = shouldFilter
-    ? availableTools.filter(t => enabledTools.has(t.name))
-    : availableTools;
+  const activeTools = getActiveTools(availableTools, enabledTools, isLoadingEnablement);
   return executeMetaTool(name, args, activeTools);
 }

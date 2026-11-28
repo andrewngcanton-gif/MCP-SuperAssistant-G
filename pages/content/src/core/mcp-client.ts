@@ -5,7 +5,7 @@ import { eventBus } from '../events/event-bus';
 import type { ServerConfig, ConnectionStatus } from '../types/stores';
 import { logMessage } from '../utils/helpers';
 import { pluginRegistry } from '../plugins';
-import { META_TOOLS, runMetaTool } from './metaTools';
+import { buildUnknownToolError, META_TOOLS, runMetaTool } from './metaTools';
 
 // Wording that marks a tool error as an argument/validation failure worth
 // answering with the expected schema ("requires"/"must be one of" are the
@@ -396,6 +396,15 @@ class McpClient {
     const connectionStore = useConnectionStore.getState();
     if (!toolName.startsWith('browser_') && connectionStore.status !== 'connected') {
       throw new Error(`Not connected to MCP server. Current status: ${connectionStore.status}. Please check your connection.`);
+    }
+
+    // Fast-fail hallucinated tool names locally (~1ms) before hitting the proxy
+    // so auto-execute loops self-correct immediately instead of waiting through retries.
+    const { availableTools, enabledTools, isLoadingEnablement } = useToolStore.getState();
+    const unknownToolError = buildUnknownToolError(toolName, availableTools, enabledTools, isLoadingEnablement);
+    if (unknownToolError) {
+      logMessage(`[McpClient] Intercepted unknown tool locally: ${toolName}`);
+      throw new Error(unknownToolError);
     }
 
     logMessage(`[McpClient] Calling tool: ${toolName} with args: ${JSON.stringify(args)}`);

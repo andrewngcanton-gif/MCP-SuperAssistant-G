@@ -551,7 +551,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
 
         // Enhanced error handling for connection issues
         let errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
-        const isStructuredToolError = /MCP error \d{3}|"jsonrpc"|Expected input_schema|invalid arguments/i.test(
+        const isStructuredToolError = /MCP error \d{3}|"jsonrpc"|Expected input_schema|invalid arguments|Unknown tool\b/i.test(
           errorMessage,
         );
 
