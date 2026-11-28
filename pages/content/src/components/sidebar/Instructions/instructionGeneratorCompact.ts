@@ -409,7 +409,7 @@ TOOL INDEX (core + on-demand)
 ${index}
 
 DISCOVERY
-- Call core tools directly; use get_tool_schema(names: ["..."]) only when unlisted or unclear.
+- Call core tools directly; never call get_tool_schema for listed core tools unless a call fails—use it only for unlisted/deferred tools.
 - tool_lookup(query: "keyword" | "").`;
 
   const rtkSection = useRtkWithWebCodex ? buildRtkInstructions(tools) : '';

@@ -303,7 +303,7 @@ test('generateInstructionsCompact includes inline core signatures to skip Turn-1
   assert.ok(out.includes('webcodex.search_project_texts(project, queries: {pattern}[]) —'));
   assert.ok(out.includes('webcodex.run_shell(project, command) —'));
   assert.ok(out.includes('webcodex.read_files(project, files: object[]) —'));
-  assert.ok(out.includes('Call core tools directly;'));
+  assert.ok(out.includes('Call core tools directly; never call get_tool_schema for listed core tools'));
   assert.ok(out.length < 2500, `expected compact prompt with signatures < 2500 chars, got ${out.length}`);
 });
 
@@ -345,11 +345,14 @@ test('WebCodex v0.5.0 surface prefers run_shell over run_process and falls back 
   assert.ok(rtk.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_shell`)'));
   assert.ok(rtk.includes('`rtk ls`/`find`/`tree`'));
   assert.ok(rtk.includes('NEVER wrap file edits'));
+  assert.ok(rtk.includes('First: discover project via `webcodex.list_projects`.'));
+  assert.ok(!rtk.includes('call `webcodex.work_on_project` before the first command'));
 
   const processOnly = makeWebCodexTools().filter(t => t.name !== 'webcodex.run_shell');
   const fallbackRtk = buildRtkInstructions(processOnly);
   assert.ok(fallbackRtk.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_process` only)'));
   assert.ok(fallbackRtk.includes('Use executable `rtk` with original args'));
+  assert.ok(fallbackRtk.includes('call `webcodex.work_on_project` before the first command'));
 
   const fallbackReminder = generateInstructionReminder(processOnly, true);
   assert.ok(fallbackReminder.includes('webcodex.run_process'));

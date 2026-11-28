@@ -107,8 +107,9 @@ export const buildRtkInstructions = (tools: AdvertisedTool[] | undefined): strin
     .join('; ');
 
   if (names.runShell) {
+    const shellSetup = names.listProjects ? ` First: discover project via \`${names.listProjects}\`.` : '';
     return `RTK OUTPUT COMPRESSION (WebCodex \`${names.runShell}\`)
-- Always prefix verbose read-only/build/test CLI commands with \`rtk\`: \`rtk git\` (\`status\`/\`diff\`/\`log\`), \`rtk rg\`/\`grep\`, \`rtk ls\`/\`find\`/\`tree\`, \`rtk pnpm\`/\`npm\`/\`tsc\`/\`pytest\`/\`cargo\`/\`docker\`, or \`rtk test <cmd>\`; prefer these over PowerShell \`Get-ChildItem\`/\`Select-String\` when listing/searching in shell.${setup ? ` First: ${setup}.` : ''}
+- Always prefix verbose read-only/build/test CLI commands with \`rtk\`: \`rtk git\` (\`status\`/\`diff\`/\`log\`), \`rtk rg\`/\`grep\`, \`rtk ls\`/\`find\`/\`tree\`, \`rtk pnpm\`/\`npm\`/\`tsc\`/\`pytest\`/\`cargo\`/\`docker\`, or \`rtk test <cmd>\`; prefer these over PowerShell \`Get-ChildItem\`/\`Select-String\` when listing/searching in shell.${shellSetup}
 - NEVER wrap file edits, \`python -c\`, heredocs, redirects, pipes, short commands, \`--json\`/\`--porcelain\`, or full/audit logs in \`rtk\` (run raw; re-run raw if RTK omits needed detail). Windows pip: \`rtk python -m pip\`.
 - Never install RTK or alter trust/telemetry; run \`rtk trust\` only with explicit user consent.`;
   }
