@@ -352,7 +352,7 @@ export const generateInstructionReminder = (tools: CompactToolInput[], useRtkWit
   const wcRtk = useRtkWithWebCodex ? resolveWebCodexRtkTools(tools) : null;
   const rtkHint = wcRtk
     ? wcRtk.runShell
-      ? `\nRTK: prefix verbose ${wcRtk.runShell} reads/tests/builds with "rtk" (git/rg/ls/find/pnpm/test); never wrap edits or scripts.`
+      ? `\nRTK: prefix verbose ${wcRtk.runShell} reads/tests/builds with "rtk" (git/rg/find or rtk test/err <cmd>; avoid rtk tree/grep); never wrap edits or scripts.`
       : `\nRTK: for long human-readable ${wcRtk.runProcess} output, use executable "rtk" with original args.`
     : '';
   const moreHint = deferredCount > 0 ? ` (+${deferredCount} more via tool_lookup)` : '';

@@ -49,7 +49,7 @@
 
 ## 新功能与改进
 
-- **WebCodex RTK 开关。** 先在运行 WebCodex Runner 的机器上安装 RTK 命令行工具，并确保 Runner 能在 `PATH` 中找到 `rtk`。直接使用原版 WebCodex 即可。侧栏 **Instructions → Use RTK with WebCodex** 默认关闭。启用 WebCodex 的命令执行工具（`v0.5.0` 与 `v0.5.1` 均优先通过 `run_shell` 加 `rtk` 前缀，仅在禁用 `run_shell` 时回退到 `run_process`）并打开开关后，将重新生成的 MCP Instructions 发到对话。指令会提示模型使用 RTK 压缩适用命令的长输出。若在保留 `work_on_project` 的工具面（`v0.5.0` 或 `adaptive`）下还希望打开项目时一并返回同一规则，可按 [Windows 进阶配置](WEBCODEX_WINDOWS.md#webcodex-runner-config) 或 [macOS 进阶配置](WEBCODEX_MACOS.md#webcodex-runner-config) 配置 Runner 的 `[instructions].files`。 [RTK 安装说明](https://github.com/rtk-ai/rtk)
+- **WebCodex RTK 开关。** 侧栏 **Instructions → Use RTK with WebCodex** 默认关闭；在运行 WebCodex Runner 的机器上安装 [RTK](https://github.com/rtk-ai/rtk) 并打开开关后，扩展会自动引导模型在 `run_shell`（禁用时回退 `run_process`）中使用 `rtk` 压缩目录树、搜索、构建和测试的长输出（实测可省 **77%–97%** token，同时严格禁止包裹写文件与脚本），兼容 WebCodex `v0.5.0` 与 `v0.5.1`。详细安装步骤、Homebrew/Windows 避坑与多工具共用说明见 **[RTK 输出压缩小白指南（RTK_GUIDE.md）](RTK_GUIDE.md)**。
 - **WebCodex 文件编辑规则。** 指令说明 `edit_project_files` 必须提供 `project` 和 `changes`，每项包含 `kind` 和 `path`。内容复杂或首次报错时，提示模型改用同一 WebCodex 服务上可用的 `run_shell`，以减少重复尝试和 token 消耗。
 - **更短的 MCP Instructions。** 精简 Compact 和 JSON 两种模板的自然语言，保留必填参数、schema 查询方式、调用示例以及 WebCodex 和 RTK 规则。去掉收到 schema 错误提示就重试的通用指令。
 - **CrewDispatch 代理配置开关。** CrewDispatch 插件的公开发布版已过时，后续不再更新。大多数用户可以忽略此选项，保持默认关闭。已有可运行的 CrewDispatch MCP 服务时，可以用配置生成器注册。修改开关后，重新生成代理配置并重启代理即可生效。 [CrewDispatch 配置指南](CUSTOMIZATIONS.md#crewdispatch-opt-in-proxy-configuration)
@@ -105,6 +105,7 @@
 
 - **[macOS 接入指南（WEBCODEX_MACOS.md）](WEBCODEX_MACOS.md)** — 页面顶部即附带一键启动脚本（自动读取 token、自动探测端口并启动 Proxy），以及手动配置与进阶参数。
 - **[Windows 接入指南（WEBCODEX_WINDOWS.md）](WEBCODEX_WINDOWS.md)** — 包含 PowerShell 一键生成配置脚本、进阶 `runner.toml` / RTK 配置与无界面开机自启方案。
+- **[RTK 输出压缩小白指南（RTK_GUIDE.md）](RTK_GUIDE.md)** — 3 步完成 Windows / macOS RTK 安装、开启扩展开关与查看省流统计（兼容 `v0.5.0` / `v0.5.1`，可与本机 Codex CLI 共用统计库）。
 
 Proxy 启动后，在扩展侧栏连接设置中选 **SSE**、**Server URI** 填 `http://localhost:3006/sse` 点击 **Connect**，并在 **Tools** 标签页确认 WebCodex 工具已启用即可开始使用。
 

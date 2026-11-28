@@ -109,7 +109,7 @@ export const buildRtkInstructions = (tools: AdvertisedTool[] | undefined): strin
   if (names.runShell) {
     const shellSetup = names.listProjects ? ` First: discover project via \`${names.listProjects}\`.` : '';
     return `RTK OUTPUT COMPRESSION (WebCodex \`${names.runShell}\`)
-- Always prefix verbose read-only/build/test CLI commands with \`rtk\`: \`rtk git\` (\`status\`/\`diff\`/\`log\`), \`rtk rg\`/\`grep\`, \`rtk ls\`/\`find\`/\`tree\`, \`rtk pnpm\`/\`npm\`/\`tsc\`/\`pytest\`/\`cargo\`/\`docker\`, or \`rtk test <cmd>\`; prefer these over PowerShell \`Get-ChildItem\`/\`Select-String\` when listing/searching in shell.${shellSetup}
+- Always prefix verbose read-only/build/test CLI commands with \`rtk\`: \`rtk git\` (\`status\`/\`diff\`/\`log\`), \`rtk rg\`, \`rtk find "*" <dir>\`, \`rtk tsc\`/\`pytest\`/\`cargo\`/\`docker\`, and wrap custom test/build scripts (like \`pnpm\`/\`npm\` scripts) with \`rtk test <cmd>\` or \`rtk err <cmd>\` (on macOS/Linux \`rtk ls\` also works; avoid \`rtk tree\`/\`grep\`, and on Windows also avoid \`rtk ls\` and PowerShell \`Get-ChildItem\`/\`Select-String\`).${shellSetup}
 - NEVER wrap file edits, \`python -c\`, heredocs, redirects, pipes, short commands, \`--json\`/\`--porcelain\`, or full/audit logs in \`rtk\` (run raw; re-run raw if RTK omits needed detail). Windows pip: \`rtk python -m pip\`.
 - Never install RTK or alter trust/telemetry; run \`rtk trust\` only with explicit user consent.`;
   }

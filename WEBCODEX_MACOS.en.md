@@ -222,6 +222,8 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config ./mcp-config.json --ou
    max_output_bytes = 262144
    ```
 
+   > **Homebrew `PATH` tip**: If you installed RTK via Homebrew (`/opt/homebrew/bin/rtk`) and launch WebCodex Desktop from Finder/Launchpad, GUI apps do not read `~/.zshrc`. Add `export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"` to `~/.zshenv` and restart WebCodex Desktop so `run_shell` can find `rtk`.
+
    On the `v0.5.1` `cli` 9-tool surface, turning on [Optional WebCodex RTK guidance](README.en.md#new-features-and-improvements) in the extension sidebar directly injects `run_shell` RTK rules (no `work_on_project` needed). Only when using a surface that exposes `work_on_project` (`v0.5.0` or `adaptive`) do you need to create `rtk-instructions.md` next to `runner.toml` and attach it via `[instructions].files`:
 
    ```toml

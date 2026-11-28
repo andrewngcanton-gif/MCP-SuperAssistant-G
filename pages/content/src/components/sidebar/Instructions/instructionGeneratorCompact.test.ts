@@ -324,9 +324,10 @@ test('WebCodex v0.5.1 cli 9-tool surface injects run_shell RTK guidance and remi
   const rtk = buildRtkInstructions(tools);
   assert.ok(rtk.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_shell`)'));
   assert.ok(rtk.includes('`rtk git` (`status`/`diff`/`log`)'));
-  assert.ok(rtk.includes('`rtk rg`/`grep`'));
-  assert.ok(rtk.includes('`rtk ls`/`find`/`tree`'));
-  assert.ok(rtk.includes('`rtk test <cmd>`'));
+  assert.ok(rtk.includes('`rtk rg`, `rtk find "*" <dir>`'));
+  assert.ok(rtk.includes('on macOS/Linux `rtk ls` also works'));
+  assert.ok(rtk.includes('avoid `rtk tree`/`grep`'));
+  assert.ok(rtk.includes('`rtk test <cmd>` or `rtk err <cmd>`'));
   assert.ok(rtk.includes('NEVER wrap file edits'));
   assert.ok(rtk.includes('First: discover project via `webcodex.list_projects`.'));
   assert.ok(rtk.includes('Windows pip: `rtk python -m pip`'));
@@ -335,7 +336,7 @@ test('WebCodex v0.5.1 cli 9-tool surface injects run_shell RTK guidance and remi
   assert.ok(compact.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_shell`)'));
 
   const reminder = generateInstructionReminder(tools, true);
-  assert.ok(reminder.includes('RTK: prefix verbose webcodex.run_shell reads/tests/builds with "rtk"'));
+  assert.ok(reminder.includes('git/rg/find or rtk test/err <cmd>; avoid rtk tree/grep'));
   assert.ok(reminder.includes('never wrap edits or scripts'));
   assert.ok(reminder.length < 850, `expected reminder with RTK < 850 chars, got ${reminder.length}`);
 });
@@ -343,7 +344,7 @@ test('WebCodex v0.5.1 cli 9-tool surface injects run_shell RTK guidance and remi
 test('WebCodex v0.5.0 surface prefers run_shell over run_process and falls back when run_shell is disabled', () => {
   const rtk = buildRtkInstructions(makeWebCodexTools());
   assert.ok(rtk.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_shell`)'));
-  assert.ok(rtk.includes('`rtk ls`/`find`/`tree`'));
+  assert.ok(rtk.includes('`rtk rg`, `rtk find "*" <dir>`'));
   assert.ok(rtk.includes('NEVER wrap file edits'));
   assert.ok(rtk.includes('First: discover project via `webcodex.list_projects`.'));
   assert.ok(!rtk.includes('call `webcodex.work_on_project` before the first command'));

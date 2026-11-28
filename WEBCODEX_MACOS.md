@@ -222,6 +222,8 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config ./mcp-config.json --ou
    max_output_bytes = 262144
    ```
 
+   > **Homebrew `PATH` 提醒**：若通过 Homebrew 安装 RTK（`/opt/homebrew/bin/rtk`），且是从桌面图标直接启动 WebCodex Desktop，GUI 启动环境不会读取 `~/.zshrc`。建议把 `export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"` 写入 `~/.zshenv` 并重启 WebCodex Desktop，确保 `run_shell` 能正常找到 `rtk`。
+   >
    > 在 `v0.5.1` `cli` 9 工具模式下，打开扩展侧栏的 [WebCodex RTK 开关](README.md#新功能与改进) 即可直接为 `run_shell` 注入 RTK 压缩规则（无需 `work_on_project`）。仅当你改用暴露了 `work_on_project` 的 `v0.5.0` 或 `adaptive` 工具面时，才需另外在 `runner.toml` 同目录新建 `rtk-instructions.md` 并挂载：
 
    ```toml
