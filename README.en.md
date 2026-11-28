@@ -32,9 +32,9 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ### v0.2.2 (2026-11-28)
 
-- **Instant self-correction when AI calls a non-existent tool.** Previously, if a model invented a tool name that wasn't there, it could waste time failing, look like a connection drop, or stop and ask you to refresh the tool list. The extension now catches this locally right away and guides the AI to pick a real tool so multi-turn automation keeps moving.
-- **More reliable code search and file reading on the first try.** Added clear habits for searching code and reading files with WebCodex right in the initial prompt, so models get the format right on the first call with fewer retries and lower token usage.
-- **Unified one-command WebCodex setup across Windows and macOS.** Streamlined both OS guides around a single cross-platform launcher script—two commands set up the connection and optional headless auto-start at login, keeping memory usage low and setup simple.
+- **Added local pre-flight guard and self-correction for unknown tool names.** When a model hallucinates or calls a tool name missing from the live catalog, the extension immediately returns the available tool list and steers it to a valid tool locally—preserving the error verbatim instead of showing connection-lost or timeout messages, and keeping multi-turn automation running without asking to refresh the tool list.
+- **Expanded initial WebCodex guidance for code search and file reading.** Added usage rules for `search_project_texts` argument placement and batched `read_files` range reads (generated only for tools actually enabled), reducing first-turn validation errors, redundant reads, and token usage.
+- **Added a unified cross-platform WebCodex launcher and streamlined OS guides.** Introduced a shared Node launcher for Windows and macOS covering config discovery, local proxy startup, and optional headless auto-start at login, while simplifying both [WEBCODEX_WINDOWS.en.md](WEBCODEX_WINDOWS.en.md) and [WEBCODEX_MACOS.en.md](WEBCODEX_MACOS.en.md).
 
 > For earlier releases, see the [full changelog (CHANGELOG.en.md)](CHANGELOG.en.md).
 
