@@ -125,7 +125,7 @@ Follow these 3 steps (compatible with local WebCodex **0.5.0** and **0.5.1**; ex
      ```markdown
      # RTK output compression
 
-     - When running supported commands on this Runner that produce verbose human-readable output, compress output with RTK before returning it: call `run_process` with `executable: "rtk"` and pass the original command and arguments in `args` (e.g. `["git","log","-12"]`). Use original commands for short outputs or unsupported commands.
+     - When running supported commands on this Runner that produce verbose human-readable output, compress output with RTK before returning it: prefix the command with `rtk` in `run_shell` (e.g. `rtk git log -12`), or if `run_shell` is disabled, call `run_process` with `executable: "rtk"` and pass the original command and arguments in `args`. Use original commands for short outputs or unsupported commands.
      - Always run original commands for machine-readable output, structured verification evidence, full logs, releases, security checks, forensics, or hashes; inspect full output if compressed summary is insufficient.
      - Keep telemetry disabled; only run `rtk trust` with explicit user consent.
      ```

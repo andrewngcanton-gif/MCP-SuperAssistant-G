@@ -130,7 +130,8 @@ test('generateInstructionReminder handles empty tools and optional RTK hint', ()
   assert.equal(generateInstructionReminder([], false), '');
   const withRtk = generateInstructionReminder(makeWebCodexTools(), true);
   assert.ok(withRtk.includes('RTK:'));
-  assert.ok(withRtk.includes('webcodex.run_process'));
+  assert.ok(withRtk.includes('webcodex.run_shell'));
+  assert.ok(withRtk.includes('prefix supported commands with "rtk"'));
   assert.ok(withRtk.length < 850, `expected reminder with RTK < 850 chars, got ${withRtk.length}`);
 });
 
@@ -335,10 +336,19 @@ test('WebCodex v0.5.1 cli 9-tool surface injects run_shell RTK guidance and remi
   assert.ok(reminder.length < 850, `expected reminder with RTK < 850 chars, got ${reminder.length}`);
 });
 
-test('WebCodex v0.5.0 surface keeps preferring run_process over run_shell for RTK', () => {
+test('WebCodex v0.5.0 surface prefers run_shell over run_process and falls back when run_shell is disabled', () => {
   const rtk = buildRtkInstructions(makeWebCodexTools());
-  assert.ok(rtk.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_process` only)'));
-  assert.ok(rtk.includes('Use executable `rtk` with original args'));
+  assert.ok(rtk.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_shell`)'));
+  assert.ok(rtk.includes('rtk git log -12'));
+
+  const processOnly = makeWebCodexTools().filter(t => t.name !== 'webcodex.run_shell');
+  const fallbackRtk = buildRtkInstructions(processOnly);
+  assert.ok(fallbackRtk.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_process` only)'));
+  assert.ok(fallbackRtk.includes('Use executable `rtk` with original args'));
+
+  const fallbackReminder = generateInstructionReminder(processOnly, true);
+  assert.ok(fallbackReminder.includes('webcodex.run_process'));
+  assert.ok(fallbackReminder.includes('executable "rtk"'));
 });
 
 test('Unqualified WebCodex v0.5.1 9-tool surface enables RTK, file-edit guidance, and compact partition', () => {

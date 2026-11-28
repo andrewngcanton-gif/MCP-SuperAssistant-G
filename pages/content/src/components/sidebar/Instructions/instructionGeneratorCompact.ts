@@ -351,9 +351,9 @@ export const generateInstructionReminder = (tools: CompactToolInput[], useRtkWit
     : '';
   const wcRtk = useRtkWithWebCodex ? resolveWebCodexRtkTools(tools) : null;
   const rtkHint = wcRtk
-    ? wcRtk.runProcess
-      ? `\nRTK: for long human-readable ${wcRtk.runProcess} output, use executable "rtk" with original args.`
-      : `\nRTK: for long human-readable ${wcRtk.runShell} output, prefix supported commands with "rtk" (e.g. "rtk git diff").`
+    ? wcRtk.runShell
+      ? `\nRTK: for long human-readable ${wcRtk.runShell} output, prefix supported commands with "rtk" (e.g. "rtk git diff").`
+      : `\nRTK: for long human-readable ${wcRtk.runProcess} output, use executable "rtk" with original args.`
     : '';
   const moreHint = deferredCount > 0 ? ` (+${deferredCount} more via tool_lookup)` : '';
 
