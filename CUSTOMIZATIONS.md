@@ -53,6 +53,17 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config scripts/crewdispatch-c
 
 以下记录各版本的具体实现细节与故障根因分析。面向用户的简要更新说明见 [README.md](README.md) 与 [CHANGELOG.md](CHANGELOG.md)。
 
+### v0.2.1（2026-11-28）
+
+- **WebCodex `v0.5.1` 与跨平台 RTK `run_shell` 规则增强：**
+  - `pages/content/src/components/sidebar/Instructions/rtkInstructions.ts`：`resolveWebCodexRtkTools` 支持以 `run_shell` 与（无前缀时）`list_projects + edit_project_files` 识别 WebCodex 服务端；`buildRtkInstructions` 改为优先为 `run_shell` 生成 `rtk` 规则，仅在禁用 `run_shell` 时回退到 `run_process`；明确列出 `rtk git`、`rtk rg`、`rtk find "*" <dir>`、`rtk tsc`/`pytest`/`cargo`/`docker`，自定义 `pnpm`/`npm` 脚本改用 `rtk test <cmd>` / `rtk err <cmd>` 避免走 `rtk fallback`；规避 Windows `rtk tree`/`ls`/`grep` 兼容性问题，同时保留 macOS/Linux 的 `rtk ls` 并严禁包裹写文件、`python -c`、重定向或管道；取消 `run_shell` 下强制前置 `work_on_project` 的提示，减少首轮多余调用。
+  - `pages/content/src/components/sidebar/Instructions/webcodexInstructions.ts` 与 `instructionGeneratorCompact.ts`：`resolveWebCodexFileTools` 与 `isWebCodexGroup` 兼容无 `work_on_project` 的 `v0.5.1` `cli` 无前缀服务；`generateInstructionReminder` 同步优先使用 `run_shell` 的 `rtk` 提示；`DISCOVERY` 收紧为禁止对已直出核心工具重复调用 `get_tool_schema`（除非调用失败）。
+  - `packages/shared/lib/i18n/locales/zh-CN.ts`：更新 `instructions.useRtkDesc`，说明支持 `run_shell` 或 `run_process`。
+  - `pages/content/src/components/sidebar/Instructions/instructionGeneratorCompact.test.ts`：新增 4 组单测（42 -> 46），覆盖 `v0.5.1` `cli` 9 工具面、`v0.5.0` 回退、无前缀识别与非 WebCodex `run_shell` 隔离。
+- **安装、Windows `v0.5.1` 与 RTK 文档完善：**
+  - 拆分 [BUILD_FROM_SOURCE.md](BUILD_FROM_SOURCE.md) / [BUILD_FROM_SOURCE.en.md](BUILD_FROM_SOURCE.en.md) 与 [RTK_GUIDE.md](RTK_GUIDE.md) / [RTK_GUIDE.en.md](RTK_GUIDE.en.md)，在 [README.md](README.md) / [README.en.md](README.en.md) 主推 Release `.zip` 预构建包（说明解压根目录即含 `manifest.json`、无 `dist/` 目录）并补充三自动选项 `> [!TIP]` 提示。
+  - 更新 [WEBCODEX_WINDOWS.md](WEBCODEX_WINDOWS.md) / [WEBCODEX_WINDOWS.en.md](WEBCODEX_WINDOWS.en.md)（PowerShell 脚本自动从 `desktop-state.json` 读取 `runtime.server_url`）与 [WEBCODEX_MACOS.md](WEBCODEX_MACOS.md) / [WEBCODEX_MACOS.en.md](WEBCODEX_MACOS.en.md)（补充 GUI 启动时的 `~/.zshenv` `PATH` 导出说明）。
+
 ### v0.2.0（2026-11-27）
 
 - **macOS `Cmd+Enter` 键盘路径与轮次归属门控兼容：**

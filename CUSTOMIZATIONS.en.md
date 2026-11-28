@@ -53,6 +53,17 @@ After changing the toggle, re-run the generator and restart the proxy; the runni
 
 Detailed implementation-level notes for each release and fix. User-facing summaries live in [README.en.md](README.en.md) and [CHANGELOG.en.md](CHANGELOG.en.md).
 
+### v0.2.1 (2026-11-28)
+
+- **WebCodex `v0.5.1` compatibility & cross-platform RTK `run_shell` guidance:**
+  - `pages/content/src/components/sidebar/Instructions/rtkInstructions.ts`: extended `resolveWebCodexRtkTools` to recognize `v0.5.1` servers via `run_shell` and unqualified `list_projects` + `edit_project_files`; inverted `buildRtkInstructions` priority to prefer `run_shell` across `v0.5.0`/`v0.5.1` (falling back to `run_process` only when `run_shell` is absent); explicitly guided `rtk git`, `rtk rg`, `rtk find "*" <dir>`, `rtk tsc`/`pytest`/`cargo`/`docker`, and `rtk test`/`rtk err` for custom `pnpm`/`npm` scripts while avoiding Windows `rtk tree`/`ls`/`grep` pitfalls (keeping `rtk ls` allowed on macOS/Linux) and strictly forbidding wrapping file edits, `python -c`, heredocs, redirects, or pipes; removed the forced `work_on_project` preamble when using `run_shell`.
+  - `pages/content/src/components/sidebar/Instructions/webcodexInstructions.ts` & `instructionGeneratorCompact.ts`: updated `resolveWebCodexFileTools` and `isWebCodexGroup` for unqualified `v0.5.1` servers, aligned `generateInstructionReminder` with `run_shell`-first RTK guidance, and tightened `DISCOVERY` so cautious models do not call `get_tool_schema` for inline core tools unless a call fails.
+  - `packages/shared/lib/i18n/locales/zh-CN.ts`: updated `instructions.useRtkDesc` for `run_shell` or `run_process`.
+  - `pages/content/src/components/sidebar/Instructions/instructionGeneratorCompact.test.ts`: added 4 unit tests (42 -> 46) covering `v0.5.1` `cli` 9-tool RTK injection, `v0.5.0` fallback when `run_shell` is disabled, unqualified `v0.5.1` partitioning, and non-WebCodex `run_shell` exclusion.
+- **Prebuilt install, Windows `v0.5.1`, and RTK documentation:**
+  - Split [BUILD_FROM_SOURCE.md](BUILD_FROM_SOURCE.md) / [BUILD_FROM_SOURCE.en.md](BUILD_FROM_SOURCE.en.md) and [RTK_GUIDE.md](RTK_GUIDE.md) / [RTK_GUIDE.en.md](RTK_GUIDE.en.md), elevated GitHub Releases prebuilt `.zip` installation in [README.en.md](README.en.md) (noting `manifest.json` sits at the archive root with no `dist/` subfolder), and added the three-auto-toggles `> [!TIP]`.
+  - Updated [WEBCODEX_WINDOWS.en.md](WEBCODEX_WINDOWS.en.md) (PowerShell Option A auto-reads `runtime.server_url` from `desktop-state.json`) and [WEBCODEX_MACOS.en.md](WEBCODEX_MACOS.en.md) (Homebrew `~/.zshenv` `PATH` tip for GUI-launched WebCodex Desktop).
+
 ### v0.2.0 (2026-11-27)
 
 - **macOS `Cmd+Enter` submit & turn-provenance gate support:**

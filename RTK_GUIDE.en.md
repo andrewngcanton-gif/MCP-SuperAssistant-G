@@ -1,4 +1,4 @@
-# Beginner Guide to RTK Output Compression (with WebCodex)
+# RTK Output Compression Guide (with WebCodex)
 
 <p align="center">
   <a href="RTK_GUIDE.md">中文</a> &bull; <strong>English</strong>

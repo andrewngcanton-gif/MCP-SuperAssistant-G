@@ -1,4 +1,4 @@
-# RTK 输出压缩小白指南（搭配 WebCodex）
+# RTK 输出压缩配置指南（搭配 WebCodex）
 
 <p align="center">
   <strong>中文</strong> &bull; <a href="RTK_GUIDE.en.md">English</a>
@@ -106,7 +106,7 @@
 
 ---
 
-## 小白常见问题与避坑
+## 常见问题与避坑
 
 - **工具结果 stderr 里出现 `[rtk] /!\ No hook installed` 正常吗？**
   完全正常，忽略即可。那是 `rtk` 在提醒你没在本机跑 `rtk init -g` 安装终端 hook；本扩展是通过指令直接带 `rtk` 前缀，**不需要也不建议**跑 `rtk init -g`。

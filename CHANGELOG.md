@@ -10,6 +10,12 @@
 
 以下列出 **MCP SuperAssistant G** 各版本的面向用户更新说明。
 
+### v0.2.1（2026-11-28）
+
+- **全面兼容 WebCodex `v0.5.1` 并升级跨平台 RTK 输出压缩规则。** Windows 与 macOS 均统一支持 WebCodex `v0.5.0` 和 `v0.5.1`；RTK 开关改为优先通过 `run_shell` 执行（仅在禁用 `run_shell` 时回退 `run_process`），主推跨平台 `rtk find`、`rtk rg` 及自定义脚本包装 `rtk test` / `rtk err`，内置避开 Windows `rtk tree`/`ls`/`grep` 兼容性问题并禁止包裹写文件与脚本。
+- **减少首轮冗余工具调用。** 取消 `run_shell` 下强行前置 `work_on_project` 的绕道，并收紧核心直出工具的 `get_tool_schema` 调用规则，避免谨慎模型重复查询已有签名。
+- **完善预构建包、Windows `v0.5.1` 与 RTK 文档体系。** README 优先引导使用 GitHub Releases 预构建 `.zip`（说明解压无 `dist/` 目录）并拆分 [BUILD_FROM_SOURCE.md](BUILD_FROM_SOURCE.md)；新增 [RTK_GUIDE.md](RTK_GUIDE.md) 配置指南；Windows 一键脚本支持自动读取 `desktop-state.json` 端口；补充三自动选项体验提示与 macOS Homebrew `~/.zshenv` `PATH` 提醒。
+
 ### v0.2.0（2026-11-27）
 
 - **新增 macOS `Cmd+Enter` 发送与轮次校验支持。** 适配标签芯片输入框、AI Studio 轮次门控以及 AI Studio Build / Apps 的自动回传按键，Windows 下的 `Ctrl+Enter` 与回车行为保持不变，并已在 macOS M1 Chrome + WebCodex `v0.5.1` 环境实测通过。

@@ -10,6 +10,12 @@
 
 User-facing release history for **MCP SuperAssistant G**.
 
+### v0.2.1 (2026-11-28)
+
+- **Full WebCodex `v0.5.1` compatibility and upgraded cross-platform RTK compression rules.** Both Windows and macOS now work seamlessly with WebCodex `v0.5.0` and `v0.5.1`; the RTK toggle prefers `run_shell` (falling back to `run_process` only when `run_shell` is disabled), steers models toward cross-platform `rtk find`, `rtk rg`, and `rtk test`/`rtk err` wrappers for custom scripts while avoiding Windows `rtk tree`/`ls`/`grep` pitfalls and strictly forbidding wrapping file edits or scripts.
+- **Reduced redundant Turn-1 tool calls.** Removed the forced `work_on_project` detour before `run_shell` and tightened Compact `DISCOVERY` guidance so cautious models use inline core signatures directly instead of calling `get_tool_schema`.
+- **Expanded prebuilt install, Windows `v0.5.1`, and RTK documentation.** Made GitHub Releases prebuilt `.zip` the primary install path (clarifying there is no `dist/` subfolder) with a dedicated [BUILD_FROM_SOURCE.en.md](BUILD_FROM_SOURCE.en.md) guide, added [RTK_GUIDE.en.md](RTK_GUIDE.en.md), updated the Windows setup script to auto-read `desktop-state.json`, and added the three-auto-toggles tip plus macOS Homebrew `~/.zshenv` `PATH` guidance.
+
 ### v0.2.0 (2026-11-27)
 
 - **Added macOS `Cmd+Enter` submit and turn-gate support.** Updated chip input, AI Studio turn provenance gates, and AI Studio Build / Apps auto-submit key dispatch to accept `Cmd+Enter` on macOS while keeping Windows `Ctrl+Enter` and plain `Enter` behavior unchanged; verified live on macOS M1 Chrome with WebCodex `v0.5.1`.

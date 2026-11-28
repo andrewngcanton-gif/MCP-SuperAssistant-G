@@ -30,11 +30,11 @@
 
 ## 更新记录
 
-### v0.2.0（2026-11-27）
+### v0.2.1（2026-11-28）
 
-- **新增 macOS `Cmd+Enter` 发送与轮次校验支持。** 适配标签芯片输入框、AI Studio 轮次门控以及 AI Studio Build / Apps 的自动回传按键，Windows 下的 `Ctrl+Enter` 与回车行为保持不变，并已在 macOS M1 Chrome + WebCodex `v0.5.1` 环境实测通过。
-- **新增 macOS CI 验证与自动跨平台打包发布工作流。** 升级至 Node 22 LTS（`>=22.13.0`），通过 GitHub Actions `macos-latest` 自动执行构建、类型检查、单元测试与 DOM 集成测试，并在打 tag 时自动打包上传 Chrome 扩展压缩包到 GitHub Releases。
-- **拆分并完善 WebCodex 独立双语使用指南。** 将 README 保留为通用概述，并拆分出面向 macOS（`v0.5.1`，含顶部一键启动脚本）与 Windows（`v0.5.0`）的独立指南页面（[WEBCODEX_MACOS.md](WEBCODEX_MACOS.md) / [WEBCODEX_WINDOWS.md](WEBCODEX_WINDOWS.md)）。
+- **全面兼容 WebCodex `v0.5.1` 并升级跨平台 RTK 输出压缩规则。** Windows 与 macOS 均统一支持 WebCodex `v0.5.0` 和 `v0.5.1`；RTK 开关改为优先通过 `run_shell` 执行（仅在禁用 `run_shell` 时回退 `run_process`），主推跨平台 `rtk find`、`rtk rg` 及自定义脚本包装 `rtk test` / `rtk err`，内置避开 Windows `rtk tree`/`ls`/`grep` 兼容性问题并禁止包裹写文件与脚本。
+- **减少首轮冗余工具调用。** 取消 `run_shell` 下强行前置 `work_on_project` 的绕道，并收紧核心直出工具的 `get_tool_schema` 调用规则，避免谨慎模型重复查询已有签名。
+- **完善预构建包、Windows `v0.5.1` 与 RTK 文档体系。** README 优先引导使用 GitHub Releases 预构建 `.zip`（说明解压无 `dist/` 目录）并拆分 [BUILD_FROM_SOURCE.md](BUILD_FROM_SOURCE.md)；新增 [RTK_GUIDE.md](RTK_GUIDE.md) 配置指南；Windows 一键脚本支持自动读取 `desktop-state.json` 端口；补充三自动选项体验提示与 macOS Homebrew `~/.zshenv` `PATH` 提醒。
 
 > 更早版本的更新说明见 [完整更新记录（CHANGELOG.md）](CHANGELOG.md)。
 
@@ -49,7 +49,7 @@
 
 ## 新功能与改进
 
-- **WebCodex RTK 开关。** 侧栏 **Instructions → Use RTK with WebCodex** 默认关闭；在运行 WebCodex Runner 的机器上安装 [RTK](https://github.com/rtk-ai/rtk) 并打开开关后，扩展会自动引导模型在 `run_shell`（禁用时回退 `run_process`）中使用 `rtk` 压缩目录树、搜索、构建和测试的长输出（实测可省 **77%–97%** token，同时严格禁止包裹写文件与脚本），兼容 WebCodex `v0.5.0` 与 `v0.5.1`。详细安装步骤、Homebrew/Windows 避坑与多工具共用说明见 **[RTK 输出压缩小白指南（RTK_GUIDE.md）](RTK_GUIDE.md)**。
+- **WebCodex RTK 开关。** 侧栏 **Instructions → Use RTK with WebCodex** 默认关闭；在运行 WebCodex Runner 的机器上安装 [RTK](https://github.com/rtk-ai/rtk) 并打开开关后，扩展会自动引导模型在 `run_shell`（禁用时回退 `run_process`）中使用 `rtk` 压缩目录树、搜索、构建和测试的长输出（实测可省 **77%–97%** token，同时严格禁止包裹写文件与脚本），兼容 WebCodex `v0.5.0` 与 `v0.5.1`。详细安装步骤、Homebrew/Windows 避坑与多工具共用说明见 **[RTK 输出压缩配置指南（RTK_GUIDE.md）](RTK_GUIDE.md)**。
 - **WebCodex 文件编辑规则。** 指令说明 `edit_project_files` 必须提供 `project` 和 `changes`，每项包含 `kind` 和 `path`。内容复杂或首次报错时，提示模型改用同一 WebCodex 服务上可用的 `run_shell`，以减少重复尝试和 token 消耗。
 - **更短的 MCP Instructions。** 精简 Compact 和 JSON 两种模板的自然语言，保留必填参数、schema 查询方式、调用示例以及 WebCodex 和 RTK 规则。去掉收到 schema 错误提示就重试的通用指令。
 - **CrewDispatch 代理配置开关。** CrewDispatch 插件的公开发布版已过时，后续不再更新。大多数用户可以忽略此选项，保持默认关闭。已有可运行的 CrewDispatch MCP 服务时，可以用配置生成器注册。修改开关后，重新生成代理配置并重启代理即可生效。 [CrewDispatch 配置指南](CUSTOMIZATIONS.md#crewdispatch-opt-in-proxy-configuration)
@@ -105,7 +105,7 @@
 
 - **[macOS 接入指南（WEBCODEX_MACOS.md）](WEBCODEX_MACOS.md)** — 页面顶部即附带一键启动脚本（自动读取 token、自动探测端口并启动 Proxy），以及手动配置与进阶参数。
 - **[Windows 接入指南（WEBCODEX_WINDOWS.md）](WEBCODEX_WINDOWS.md)** — 包含 PowerShell 一键生成配置脚本、进阶 `runner.toml` / RTK 配置与无界面开机自启方案。
-- **[RTK 输出压缩小白指南（RTK_GUIDE.md）](RTK_GUIDE.md)** — 3 步完成 Windows / macOS RTK 安装、开启扩展开关与查看省流统计（兼容 `v0.5.0` / `v0.5.1`，可与本机 Codex CLI 共用统计库）。
+- **[RTK 输出压缩配置指南（RTK_GUIDE.md）](RTK_GUIDE.md)** — 3 步完成 Windows / macOS RTK 安装、开启扩展开关与查看省流统计（兼容 `v0.5.0` / `v0.5.1`，可与本机 Codex CLI 共用统计库）。
 
 Proxy 启动后，在扩展侧栏连接设置中选 **SSE**、**Server URI** 填 `http://localhost:3006/sse` 点击 **Connect**，并在 **Tools** 标签页确认 WebCodex 工具已启用即可开始使用。
 

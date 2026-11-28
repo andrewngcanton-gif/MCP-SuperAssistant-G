@@ -30,11 +30,11 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## Changelog
 
-### v0.2.0 (2026-11-27)
+### v0.2.1 (2026-11-28)
 
-- **Added macOS `Cmd+Enter` submit and turn-gate support.** Updated chip input, AI Studio turn provenance gates, and AI Studio Build / Apps auto-submit key dispatch to accept `Cmd+Enter` on macOS while keeping Windows `Ctrl+Enter` and plain `Enter` behavior unchanged; verified live on macOS M1 Chrome with WebCodex `v0.5.1`.
-- **Added macOS CI verification and automated GitHub Release zip packaging.** Upgraded CI baseline to Node 22 LTS (`>=22.13.0`) with a `macos-latest` workflow running clean build, type-check, unit tests, and DOM integration tests, automatically publishing the Chrome extension `.zip` to GitHub Releases on version tags.
-- **Split WebCodex setup into dedicated OS-specific guides.** Kept the shared overview in the main README and moved setup details to [WEBCODEX_MACOS.en.md](WEBCODEX_MACOS.en.md) (`v0.5.1`, including a top-level one-click launcher script) and [WEBCODEX_WINDOWS.en.md](WEBCODEX_WINDOWS.en.md) (`v0.5.0`).
+- **Full WebCodex `v0.5.1` compatibility and upgraded cross-platform RTK compression rules.** Both Windows and macOS now work seamlessly with WebCodex `v0.5.0` and `v0.5.1`; the RTK toggle prefers `run_shell` (falling back to `run_process` only when `run_shell` is disabled), steers models toward cross-platform `rtk find`, `rtk rg`, and `rtk test`/`rtk err` wrappers for custom scripts while avoiding Windows `rtk tree`/`ls`/`grep` pitfalls and strictly forbidding wrapping file edits or scripts.
+- **Reduced redundant Turn-1 tool calls.** Removed the forced `work_on_project` detour before `run_shell` and tightened Compact `DISCOVERY` guidance so cautious models use inline core signatures directly instead of calling `get_tool_schema`.
+- **Expanded prebuilt install, Windows `v0.5.1`, and RTK documentation.** Made GitHub Releases prebuilt `.zip` the primary install path (clarifying there is no `dist/` subfolder) with a dedicated [BUILD_FROM_SOURCE.en.md](BUILD_FROM_SOURCE.en.md) guide, added [RTK_GUIDE.en.md](RTK_GUIDE.en.md), updated the Windows setup script to auto-read `desktop-state.json`, and added the three-auto-toggles tip plus macOS Homebrew `~/.zshenv` `PATH` guidance.
 
 > For earlier releases, see the [full changelog (CHANGELOG.en.md)](CHANGELOG.en.md).
 
@@ -49,7 +49,7 @@ This project supports and acknowledges the LINUX DO community. Thank you for giv
 
 ## New features and improvements
 
-- **Optional WebCodex RTK guidance.** **Instructions → Use RTK with WebCodex** is off by default. Install [RTK](https://github.com/rtk-ai/rtk) on the machine running WebCodex Runner and turn on the toggle so generated instructions guide the model to prefix verbose directory, search, build, and test commands in `run_shell` (`run_process` fallback if `run_shell` is disabled) with `rtk`—saving **77%–97%** tokens while strictly forbidding wrapping file edits and scripts, across both WebCodex `v0.5.0` and `v0.5.1`. See the **[RTK Beginner Guide (RTK_GUIDE.en.md)](RTK_GUIDE.en.md)** for 3-step setup, OS tips, and Codex CLI sharing.
+- **Optional WebCodex RTK guidance.** **Instructions → Use RTK with WebCodex** is off by default. Install [RTK](https://github.com/rtk-ai/rtk) on the machine running WebCodex Runner and turn on the toggle so generated instructions guide the model to prefix verbose directory, search, build, and test commands in `run_shell` (`run_process` fallback if `run_shell` is disabled) with `rtk`—saving **77%–97%** tokens while strictly forbidding wrapping file edits and scripts, across both WebCodex `v0.5.0` and `v0.5.1`. See the **[RTK Output Compression Guide (RTK_GUIDE.en.md)](RTK_GUIDE.en.md)** for 3-step setup, OS tips, and Codex CLI sharing.
 - **WebCodex file-edit guidance.** Instructions spell out the required `project` and `changes` arguments for `edit_project_files`, including `kind` and `path` on every change. For complex content or after the first error, the guidance points the model to `run_shell` on the same WebCodex server when available, reducing repeated attempts and token use.
 - **Shorter MCP Instructions.** The Compact and JSON templates use fewer words while retaining required arguments, schema lookup, call examples, and the WebCodex and RTK rules. The blanket instruction to retry after a schema hint was removed.
 - **Opt-in CrewDispatch proxy setup.** The publicly released CrewDispatch plugin is outdated and will receive no further updates. Most users can leave this option off, which is the default. If you already have a working CrewDispatch MCP server, you can register it with the config generator. After changing the toggle, generate the config again and restart the proxy. [CrewDispatch setup](CUSTOMIZATIONS.en.md#crewdispatch-opt-in-proxy-configuration)
@@ -105,7 +105,7 @@ Web AI (Gemini / AI Studio) ←→ Browser Extension ←→ Local Proxy (SSE) �
 
 - **[macOS Guide (WEBCODEX_MACOS.en.md)](WEBCODEX_MACOS.en.md)** — starts right at the top with a one-click launcher script (auto-reads token, auto-detects the live WebCodex port, and starts the proxy), plus manual setup and advanced options.
 - **[Windows Guide (WEBCODEX_WINDOWS.en.md)](WEBCODEX_WINDOWS.en.md)** — includes the PowerShell auto-config script, advanced `runner.toml` / RTK configuration, and optional headless auto-start via Scheduled Tasks.
-- **[RTK Output Compression Guide (RTK_GUIDE.en.md)](RTK_GUIDE.en.md)** — 3-step beginner setup for Windows & macOS, sidebar toggle walkthrough, and savings verification (`v0.5.0` / `v0.5.1`, shares stats with Codex CLI).
+- **[RTK Output Compression Guide (RTK_GUIDE.en.md)](RTK_GUIDE.en.md)** — 3-step setup for Windows & macOS, sidebar toggle walkthrough, and savings verification (`v0.5.0` / `v0.5.1`, shares stats with Codex CLI).
 
 Once the proxy is running, choose **SSE** in the extension sidebar's connection settings, enter `http://localhost:3006/sse` as **Server URI**, click **Connect**, and verify the WebCodex tools in the **Tools** tab.
 
