@@ -30,11 +30,11 @@
 
 ## 更新记录
 
-### v0.2.1（2026-11-28）
+### v0.2.2（2026-11-28）
 
-- **全面兼容 WebCodex `v0.5.1` 并升级跨平台 RTK 输出压缩规则。** Windows 与 macOS 均统一支持 WebCodex `v0.5.0` 和 `v0.5.1`；RTK 开关改为优先通过 `run_shell` 执行（仅在禁用 `run_shell` 时回退 `run_process`），主推跨平台 `rtk find`、`rtk rg` 及自定义脚本包装 `rtk test` / `rtk err`，内置避开 Windows `rtk tree`/`ls`/`grep` 兼容性问题并禁止包裹写文件与脚本。
-- **减少首轮冗余工具调用。** 取消 `run_shell` 下强行前置 `work_on_project` 的绕道，并收紧核心直出工具的 `get_tool_schema` 调用规则，避免谨慎模型重复查询已有签名。
-- **完善预构建包、Windows `v0.5.1` 与 RTK 文档体系。** README 优先引导使用 GitHub Releases 预构建 `.zip`（说明解压无 `dist/` 目录）并拆分 [BUILD_FROM_SOURCE.md](BUILD_FROM_SOURCE.md)；新增 [RTK_GUIDE.md](RTK_GUIDE.md) 配置指南；Windows 一键脚本支持自动读取 `desktop-state.json` 端口；补充三自动选项体验提示与 macOS Homebrew `~/.zshenv` `PATH` 提醒。
+- **AI 叫错工具名时立刻纠偏，不再卡住。** 以前 AI 偶尔会自己编出不存在的工具名，结果白等报错、误显示断连，甚至停下来让你刷新工具列表；现在扩展会在本地第一时间提醒它改用正确的工具，多轮自动执行可以顺畅接续。
+- **搜代码、读文件一次做对，少走弯路。** 在首轮说明里补上了 WebCodex 搜代码和读文件的使用习惯，AI 第一次调用就能按正确方式定位和批量读取代码，减少报错重试，也更省 token。
+- **Windows 和 macOS 共用一套 WebCodex 一键启动脚本。** 两个系统的接入指南都大幅精简，两行命令就能自动配好连接并支持后台无界面开机自启，省内存也更省心。
 
 > 更早版本的更新说明见 [完整更新记录（CHANGELOG.md）](CHANGELOG.md)。
 

@@ -53,6 +53,18 @@ After changing the toggle, re-run the generator and restart the proxy; the runni
 
 Detailed implementation-level notes for each release and fix. User-facing summaries live in [README.en.md](README.en.md) and [CHANGELOG.en.md](CHANGELOG.en.md).
 
+### v0.2.2 (2026-11-28)
+
+- **Local pre-flight unknown/hallucinated tool guard & verbatim error preservation:**
+  - `pages/content/src/core/metaTools.ts` & `pages/content/src/core/mcp-client.ts`: added `buildUnknownToolError()` and invoked it inside `McpClient.callTool()` before hitting the proxy; unknown tool names (excluding meta-tools, `browser_*` virtual tools, and unpopulated catalogs) fast-fail locally with same-prefix candidate tools (capped at 12 with a `tool_lookup` hint), edit-like tool guidance via `resolveWebCodexFileTools()` pointing to live `run_shell` / `edit_project_files`, and explicit instructions not to stop or ask the user to refresh `tools/list`.
+  - `pages/content/src/render_prescript/src/renderer/components.ts` & `functionHistory.ts`: added `Unknown tool` to `isStructuredToolError` so local guard errors are preserved verbatim instead of rewritten as connection-lost or timeout messages.
+  - `pages/content/src/core/metaTools.test.ts` & `scripts/dom-tests/gemini.test.ts`: added 3 `buildUnknownToolError` unit tests and a Gemini DOM regression assertion verifying `Unknown tool` messages remain intact.
+- **Expanded WebCodex initial guidance into `WEBCODEX RULES`:**
+  - `pages/content/src/components/sidebar/Instructions/webcodexInstructions.ts` & `instructionGeneratorCompact.ts`: extended `resolveWebCodexFileTools()` to resolve `search_project_texts` and `read_files` strictly from advertised tools; updated `buildWebCodexFileEditGuidance()` to emit `WEBCODEX RULES` covering `search_project_texts` (`path` inside `queries[]`, omit extra `context_before`/`context_after`) and `read_files` (batch ranges, `start_line`+`limit` instead of `end_line`, avoid re-reading unchanged code); guarded `generateInstructionReminder()` on `wcFiles?.editProjectFiles`.
+  - `pages/content/src/components/sidebar/Instructions/instructionGeneratorCompact.test.ts`: updated assertions and added partial-tool surface tests (without `edit_project_files`, `search_project_texts`-only, `read_files`-only, and non-WebCodex isolation; unit tests 46 -> 50).
+- **Unified cross-platform WebCodex launcher & streamlined bilingual OS guides:**
+  - Added `scripts/webcodex/start-mcp-webcodex.mjs` unifying Windows/macOS `webcodex-server`/`webcodex-runner` discovery, config generation, proxy launch, and headless auto-start (Windows Scheduled Tasks / macOS `launchd`), and streamlined [WEBCODEX_WINDOWS.en.md](WEBCODEX_WINDOWS.en.md), [WEBCODEX_MACOS.en.md](WEBCODEX_MACOS.en.md), their Chinese counterparts, and [README.en.md](README.en.md).
+
 ### v0.2.1 (2026-11-28)
 
 - **WebCodex `v0.5.1` compatibility & cross-platform RTK `run_shell` guidance:**

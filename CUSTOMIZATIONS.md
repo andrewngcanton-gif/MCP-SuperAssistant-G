@@ -53,6 +53,18 @@ npx -y @srbhptl39/mcp-superassistant-proxy@0.1.9 --config scripts/crewdispatch-c
 
 以下记录各版本的具体实现细节与故障根因分析。面向用户的简要更新说明见 [README.md](README.md) 与 [CHANGELOG.md](CHANGELOG.md)。
 
+### v0.2.2（2026-11-28）
+
+- **未知/幻觉工具名本地快速拦截与错误原文保留：**
+  - `pages/content/src/core/metaTools.ts` 与 `pages/content/src/core/mcp-client.ts`：新增 `buildUnknownToolError()` 并在 `McpClient.callTool()` 进入代理调用前做本地预检；命中不在当前已加载列表中的工具名（跳过元工具、`browser_*` 虚拟工具及空目录）时立即抛出自愈提示，列出同前缀可用工具（超 12 个时提示 `tool_lookup`），并在识别到编辑类工具名时结合 `resolveWebCodexFileTools()` 指向可用的 `run_shell` / `edit_project_files`，同时明确禁止模型停下要求用户刷新 `tools/list`。
+  - `pages/content/src/render_prescript/src/renderer/components.ts` 与 `functionHistory.ts`：将 `Unknown tool` 纳入 `isStructuredToolError` 正则，保留本地拦截原文，避免被改写为断连或超时提示。
+  - `pages/content/src/core/metaTools.test.ts` 与 `scripts/dom-tests/gemini.test.ts`：新增 3 组 `buildUnknownToolError` 单测与 Gemini 卡片 `Unknown tool` 原文保留 DOM 回归断言。
+- **WebCodex 首轮引导扩展为 `WEBCODEX RULES`：**
+  - `pages/content/src/components/sidebar/Instructions/webcodexInstructions.ts` 与 `instructionGeneratorCompact.ts`：`resolveWebCodexFileTools()` 扩展解析 `search_project_texts` 与 `read_files`（按实际暴露工具按需拼装，不提及未启用工具）；`buildWebCodexFileEditGuidance()` 标题升级为 `WEBCODEX RULES`，补入 `search_project_texts`（`path` 放进 `queries[]` 内、省略多余 `context_before`/`context_after`）与 `read_files`（合并区间、`start_line`+`limit` 而非 `end_line`、避免重复读取）规则；`generateInstructionReminder()` 改为按 `wcFiles?.editProjectFiles` 判空。
+  - `pages/content/src/components/sidebar/Instructions/instructionGeneratorCompact.test.ts`：更新断言并新增局部禁用工具（无 `edit_project_files` / 仅 `search_project_texts` / 仅 `read_files` / 非 WebCodex 服务隔离）单测（总单测 46 -> 50）。
+- **跨平台 WebCodex 启动脚本与双语指南精简：**
+  - 新增 `scripts/webcodex/start-mcp-webcodex.mjs`，统一封装 Windows / macOS 的 `webcodex-server` / `webcodex-runner` 探测、配置生成、Proxy 启动及无界面开机自启（Windows 计划任务 / macOS `launchd`）；同步精简 [WEBCODEX_WINDOWS.md](WEBCODEX_WINDOWS.md)、[WEBCODEX_MACOS.md](WEBCODEX_MACOS.md) 及对应英文版与 [README.md](README.md) 入口说明。
+
 ### v0.2.1（2026-11-28）
 
 - **WebCodex `v0.5.1` 与跨平台 RTK `run_shell` 规则增强：**
