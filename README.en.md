@@ -103,8 +103,8 @@ Web AI (Gemini / AI Studio) ←→ Browser Extension ←→ Local Proxy (SSE) �
 
 **Prerequisites**: Start WebCodex Desktop (or Server) and Runner on your machine, sign in, add the project folder(s) you want the AI to access, and confirm the Runner shows **Connected**. Then pick your OS guide below:
 
-- **[macOS Guide (WEBCODEX_MACOS.en.md)](WEBCODEX_MACOS.en.md)** — starts right at the top with a one-click launcher script (auto-reads token, auto-detects the live WebCodex port, and starts the proxy), plus manual setup and advanced options.
-- **[Windows Guide (WEBCODEX_WINDOWS.en.md)](WEBCODEX_WINDOWS.en.md)** — includes the PowerShell auto-config script, advanced `runner.toml` / RTK configuration, and optional headless auto-start via Scheduled Tasks.
+- **[macOS Guide (WEBCODEX_MACOS.en.md)](WEBCODEX_MACOS.en.md)** — two-line setup using the shared cross-platform script with `launchd` headless CLI + Proxy auto-start, plus Desktop, manual, and advanced options.
+- **[Windows Guide (WEBCODEX_WINDOWS.en.md)](WEBCODEX_WINDOWS.en.md)** — two-line setup using the shared cross-platform script with headless CLI + Proxy auto-start (saves ~480 MB RAM), plus Desktop, manual, and advanced options.
 - **[RTK Output Compression Guide (RTK_GUIDE.en.md)](RTK_GUIDE.en.md)** — 3-step setup for Windows & macOS, sidebar toggle walkthrough, and savings verification (`v0.5.0` / `v0.5.1`, shares stats with Codex CLI).
 
 Once the proxy is running, choose **SSE** in the extension sidebar's connection settings, enter `http://localhost:3006/sse` as **Server URI**, click **Connect**, and verify the WebCodex tools in the **Tools** tab.

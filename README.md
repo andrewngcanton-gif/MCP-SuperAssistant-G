@@ -103,8 +103,8 @@
 
 **通用前置条件**：先启动本地 WebCodex Desktop（或服务端）与 Runner，完成登录并添加你要让 AI 访问的项目目录，确认 Runner 状态显示 **已连接**。然后按系统选择对应的完整接入页面：
 
-- **[macOS 接入指南（WEBCODEX_MACOS.md）](WEBCODEX_MACOS.md)** — 页面顶部即附带一键启动脚本（自动读取 token、自动探测端口并启动 Proxy），以及手动配置与进阶参数。
-- **[Windows 接入指南（WEBCODEX_WINDOWS.md）](WEBCODEX_WINDOWS.md)** — 包含 PowerShell 一键生成配置脚本、进阶 `runner.toml` / RTK 配置与无界面开机自启方案。
+- **[macOS 接入指南（WEBCODEX_MACOS.md）](WEBCODEX_MACOS.md)** — 两行命令接入共享跨平台脚本与 `launchd` 无界面 CLI + Proxy 开机自启，并附轻量 Desktop、手动配置与进阶参数。
+- **[Windows 接入指南（WEBCODEX_WINDOWS.md）](WEBCODEX_WINDOWS.md)** — 两行命令接入共享跨平台脚本与无界面 CLI + Proxy 开机自启（省约 480 MB 内存），并附轻量 Desktop、手动配置与进阶参数。
 - **[RTK 输出压缩配置指南（RTK_GUIDE.md）](RTK_GUIDE.md)** — 3 步完成 Windows / macOS RTK 安装、开启扩展开关与查看省流统计（兼容 `v0.5.0` / `v0.5.1`，可与本机 Codex CLI 共用统计库）。
 
 Proxy 启动后，在扩展侧栏连接设置中选 **SSE**、**Server URI** 填 `http://localhost:3006/sse` 点击 **Connect**，并在 **Tools** 标签页确认 WebCodex 工具已启用即可开始使用。
