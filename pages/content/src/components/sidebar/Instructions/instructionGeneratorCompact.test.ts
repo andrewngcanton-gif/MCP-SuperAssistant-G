@@ -131,7 +131,7 @@ test('generateInstructionReminder handles empty tools and optional RTK hint', ()
   const withRtk = generateInstructionReminder(makeWebCodexTools(), true);
   assert.ok(withRtk.includes('RTK:'));
   assert.ok(withRtk.includes('webcodex.run_shell'));
-  assert.ok(withRtk.includes('prefix supported commands with "rtk"'));
+  assert.ok(withRtk.includes('never wrap edits or scripts'));
   assert.ok(withRtk.length < 850, `expected reminder with RTK < 850 chars, got ${withRtk.length}`);
 });
 
@@ -323,7 +323,11 @@ test('WebCodex v0.5.1 cli 9-tool surface injects run_shell RTK guidance and remi
   const tools = makeWebCodex051CliTools();
   const rtk = buildRtkInstructions(tools);
   assert.ok(rtk.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_shell`)'));
-  assert.ok(rtk.includes('rtk git log -12'));
+  assert.ok(rtk.includes('`rtk git` (`status`/`diff`/`log`)'));
+  assert.ok(rtk.includes('`rtk rg`/`grep`'));
+  assert.ok(rtk.includes('`rtk ls`/`find`/`tree`'));
+  assert.ok(rtk.includes('`rtk test <cmd>`'));
+  assert.ok(rtk.includes('NEVER wrap file edits'));
   assert.ok(rtk.includes('First: discover project via `webcodex.list_projects`.'));
   assert.ok(rtk.includes('Windows pip: `rtk python -m pip`'));
 
@@ -331,15 +335,16 @@ test('WebCodex v0.5.1 cli 9-tool surface injects run_shell RTK guidance and remi
   assert.ok(compact.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_shell`)'));
 
   const reminder = generateInstructionReminder(tools, true);
-  assert.ok(reminder.includes('RTK: for long human-readable webcodex.run_shell output'));
-  assert.ok(reminder.includes('prefix supported commands with "rtk"'));
+  assert.ok(reminder.includes('RTK: prefix verbose webcodex.run_shell reads/tests/builds with "rtk"'));
+  assert.ok(reminder.includes('never wrap edits or scripts'));
   assert.ok(reminder.length < 850, `expected reminder with RTK < 850 chars, got ${reminder.length}`);
 });
 
 test('WebCodex v0.5.0 surface prefers run_shell over run_process and falls back when run_shell is disabled', () => {
   const rtk = buildRtkInstructions(makeWebCodexTools());
   assert.ok(rtk.includes('RTK OUTPUT COMPRESSION (WebCodex `webcodex.run_shell`)'));
-  assert.ok(rtk.includes('rtk git log -12'));
+  assert.ok(rtk.includes('`rtk ls`/`find`/`tree`'));
+  assert.ok(rtk.includes('NEVER wrap file edits'));
 
   const processOnly = makeWebCodexTools().filter(t => t.name !== 'webcodex.run_shell');
   const fallbackRtk = buildRtkInstructions(processOnly);

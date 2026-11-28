@@ -108,8 +108,8 @@ export const buildRtkInstructions = (tools: AdvertisedTool[] | undefined): strin
 
   if (names.runShell) {
     return `RTK OUTPUT COMPRESSION (WebCodex \`${names.runShell}\`)
-- Prefix supported commands that produce long human-readable output with \`rtk\` (e.g. \`rtk git log -12\`, \`rtk git diff\`); include required schema params.${setup ? ` First: ${setup}.` : ''}
-- Use raw commands for unsupported, short, structured/machine-readable, full-log, hash, or audit output (or if RTK summary lacks detail). Windows pip: \`rtk python -m pip\`.
+- Always prefix verbose read-only/build/test CLI commands with \`rtk\`: \`rtk git\` (\`status\`/\`diff\`/\`log\`), \`rtk rg\`/\`grep\`, \`rtk ls\`/\`find\`/\`tree\`, \`rtk pnpm\`/\`npm\`/\`tsc\`/\`pytest\`/\`cargo\`/\`docker\`, or \`rtk test <cmd>\`; prefer these over PowerShell \`Get-ChildItem\`/\`Select-String\` when listing/searching in shell.${setup ? ` First: ${setup}.` : ''}
+- NEVER wrap file edits, \`python -c\`, heredocs, redirects, pipes, short commands, \`--json\`/\`--porcelain\`, or full/audit logs in \`rtk\` (run raw; re-run raw if RTK omits needed detail). Windows pip: \`rtk python -m pip\`.
 - Never install RTK or alter trust/telemetry; run \`rtk trust\` only with explicit user consent.`;
   }
 
